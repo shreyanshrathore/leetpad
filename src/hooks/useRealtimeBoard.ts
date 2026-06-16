@@ -133,14 +133,12 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     setSaveStatus('saving')
 
     try {
-      await setDoc(
-        getSavedBoardRef(userId, problemSlug),
-        {
-          boardData: snapshot,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      )
+      // Full document replace — do not use merge:true. Erased shapes are removed
+      // records in boardData.document.store; merge would leave old nested keys.
+      await setDoc(getSavedBoardRef(userId, problemSlug), {
+        boardData: snapshot,
+        updatedAt: serverTimestamp(),
+      })
 
       latestLocalRef.current = snapshot
       lastLoadedKeyRef.current = snapshotKey(snapshot)
