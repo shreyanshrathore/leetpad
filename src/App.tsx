@@ -17,7 +17,7 @@ function SaveStatusText({ status }: { status: string }) {
 
 function AppContent() {
   const { user, logout } = useAuth()
-  const { slug, loading, needsManualInput, manualSlug, setManualSlug } =
+  const { slug, loading, needsManualInput, manualSlug, setManualSlug, commitManualSlug } =
     useProblemSlug()
   const { snapshot, ready, saveStatus, error, queueSave } = useRealtimeBoard(
     user?.uid ?? null,
@@ -41,7 +41,15 @@ function AppContent() {
           placeholder="two-sum"
           value={manualSlug}
           onChange={(event) => setManualSlug(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              commitManualSlug()
+            }
+          }}
         />
+        <button type="button" onClick={commitManualSlug} disabled={!manualSlug.trim()}>
+          Open whiteboard
+        </button>
       </div>
     )
   }

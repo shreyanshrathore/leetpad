@@ -9,14 +9,16 @@ import {
 import 'tldraw/tldraw.css'
 
 interface WhiteboardProps {
-  snapshot: TLEditorSnapshot | null
-  ready: boolean
-  onChange: (snapshot: TLEditorSnapshot) => void
+  readonly snapshot: TLEditorSnapshot | null
+  readonly ready: boolean
+  readonly onChange: (snapshot: TLEditorSnapshot) => void
 }
 
 export function Whiteboard({ snapshot, ready, onChange }: WhiteboardProps) {
   const editorRef = useRef<Editor | null>(null)
   const loadedSnapshotRef = useRef<string | null>(null)
+  // Prevent remote `loadSnapshot` from triggering local save writes.
+  const isApplyingRemoteRef = useRef(false)
 
   // Load remote snapshot into the canvas when it changes.
   useEffect(() => {
@@ -26,6 +28,7 @@ export function Whiteboard({ snapshot, ready, onChange }: WhiteboardProps) {
     const serialized = snapshot ? JSON.stringify(snapshot) : '__empty__'
     if (loadedSnapshotRef.current === serialized) return
 
+    isApplyingRemoteRef.current = true
     if (snapshot) {
       loadSnapshot(editor.store, snapshot)
     } else {
@@ -33,6 +36,12 @@ export function Whiteboard({ snapshot, ready, onChange }: WhiteboardProps) {
     }
 
     loadedSnapshotRef.current = serialized
+
+    // `editor.store.listen` may fire after the effect body, so keep the
+    // suppress flag for a short window.
+    window.setTimeout(() => {
+      isApplyingRemoteRef.current = false
+    }, 100)
   }, [snapshot, ready])
 
   return (
@@ -43,6 +52,7 @@ export function Whiteboard({ snapshot, ready, onChange }: WhiteboardProps) {
 
           editor.store.listen(
             () => {
+              if (isApplyingRemoteRef.current) return
               onChange(getSnapshot(editor.store))
             },
             { source: 'user', scope: 'document' },

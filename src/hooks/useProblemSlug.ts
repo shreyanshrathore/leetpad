@@ -78,13 +78,23 @@ export function useProblemSlug() {
     }
   }, [])
 
-  const effectiveSlug = slug ?? (manualSlug.trim() || null)
+  function commitManualSlug() {
+    const trimmed = manualSlug.trim()
+    if (!trimmed) return
+
+    setSlug(trimmed)
+
+    const url = new URL(window.location.href)
+    url.searchParams.set('problem', trimmed)
+    window.history.replaceState({}, '', url.toString())
+  }
 
   return {
-    slug: effectiveSlug,
+    slug,
     loading,
     needsManualInput: !loading && !slug,
     manualSlug,
     setManualSlug,
+    commitManualSlug,
   }
 }

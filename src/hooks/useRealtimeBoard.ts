@@ -30,6 +30,8 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
   const [error, setError] = useState<string | null>(null)
 
   const isRemoteUpdate = useRef(false)
+  // When Firestore emits, React applies the snapshot in an effect *after* this
+  // callback. Keep the remote lock a bit longer to avoid clobbering local edits.
   const saveTimeoutRef = useRef<number | null>(null)
   const latestSnapshotRef = useRef<TLEditorSnapshot | null>(null)
 
@@ -58,10 +60,10 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
         setReady(true)
         setSaveStatus('saved')
 
-        // Reset flag after React applies the update.
+        // Reset after React has a chance to apply `loadSnapshot` on the canvas.
         window.setTimeout(() => {
           isRemoteUpdate.current = false
-        }, 0)
+        }, 250)
       },
       (err) => {
         setError(err.message)
