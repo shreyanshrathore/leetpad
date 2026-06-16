@@ -8,7 +8,6 @@ import {
 } from 'firebase/firestore'
 import type { TLEditorSnapshot } from 'tldraw'
 import { db } from '../firebase'
-import { isExtensionContext } from '../lib/isExtension'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -26,12 +25,10 @@ function snapshotKey(snapshot: TLEditorSnapshot | null): string {
 }
 
 /**
- * One canvas per problem. iPad edits locally; Firestore updates only on Save.
- * Extension mirrors saved board changes from iPad.
+ * One canvas per problem. Both iPad and extension can edit locally.
+ * Firestore updates on Save; the other device applies when not actively editing.
  */
 export function useRealtimeBoard(userId: string | null, problemSlug: string | null) {
-  const isMirrorDevice = isExtensionContext()
-
   const [initialSnapshot, setInitialSnapshot] = useState<TLEditorSnapshot | null>(null)
   const [incomingSnapshot, setIncomingSnapshot] = useState<TLEditorSnapshot | null>(null)
   const [ready, setReady] = useState(false)
@@ -90,8 +87,8 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
           return
         }
 
-        // Extension mirrors when iPad presses Save. iPad never reloads mid-session.
-        if (!isMirrorDevice || isEditingRef.current) return
+        // Apply saves from the other device when this device is idle.
+        if (isEditingRef.current) return
         if (savedKey === lastLoadedKeyRef.current) return
 
         lastLoadedKeyRef.current = savedKey
@@ -109,7 +106,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       initialLoadedRef.current = false
       lastLoadedKeyRef.current = null
     }
-  }, [userId, problemSlug, isMirrorDevice])
+  }, [userId, problemSlug])
 
   const onLocalChange = useCallback((nextSnapshot: TLEditorSnapshot) => {
     latestLocalRef.current = nextSnapshot
@@ -142,11 +139,6 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
 
       latestLocalRef.current = snapshot
       lastLoadedKeyRef.current = snapshotKey(snapshot)
-
-      if (isMirrorDevice) {
-        setIncomingSnapshot(snapshot)
-      }
-
       setSaveStatus('saved')
       setError(null)
     } catch (err) {
@@ -155,7 +147,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       setError(message)
       setSaveStatus('error')
     }
-  }, [userId, problemSlug, isMirrorDevice])
+  }, [userId, problemSlug])
 
   useEffect(() => {
     return () => {
@@ -172,6 +164,5 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     onLocalChange,
     saveBoard,
     registerGetSnapshot,
-    enableRemoteSync: isMirrorDevice,
   }
 }

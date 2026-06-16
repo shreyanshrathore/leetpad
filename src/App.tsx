@@ -34,7 +34,6 @@ function AppContent() {
     onLocalChange,
     saveBoard,
     registerGetSnapshot,
-    enableRemoteSync,
   } = useRealtimeBoard(user?.uid ?? null, slug)
 
   const whiteboardRef = useRef<WhiteboardHandle>(null)
@@ -110,7 +109,6 @@ function AppContent() {
           initialSnapshot={initialSnapshot}
           incomingSnapshot={incomingSnapshot}
           ready={ready}
-          enableRemoteSync={enableRemoteSync}
           onChange={onLocalChange}
         />
       )}

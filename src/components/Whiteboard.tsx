@@ -16,7 +16,6 @@ interface WhiteboardProps {
   readonly initialSnapshot: TLEditorSnapshot | null
   readonly incomingSnapshot: TLEditorSnapshot | null
   readonly ready: boolean
-  readonly enableRemoteSync: boolean
   readonly onChange: (snapshot: TLEditorSnapshot) => void
 }
 
@@ -32,7 +31,7 @@ function replaceSnapshot(editor: Editor, snapshot: TLEditorSnapshot | null) {
 
 export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
   function Whiteboard(
-    { initialSnapshot, incomingSnapshot, ready, enableRemoteSync, onChange },
+    { initialSnapshot, incomingSnapshot, ready, onChange },
     ref,
   ) {
     const editorRef = useRef<Editor | null>(null)
@@ -86,9 +85,9 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
     }, [applyInitialSnapshot])
 
     useEffect(() => {
-      if (!enableRemoteSync || !ready || !initialAppliedRef.current) return
+      if (!ready || !initialAppliedRef.current) return
       applySnapshot(incomingSnapshot)
-    }, [applySnapshot, enableRemoteSync, incomingSnapshot, ready])
+    }, [applySnapshot, incomingSnapshot, ready])
 
     return (
       <div className="whiteboard-container">
