@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/firebase.ts","./src/main.tsx","./src/vite-env.d.ts","./src/components/authgate.tsx","./src/components/whiteboard.tsx","./src/hooks/useauth.ts","./src/hooks/useproblemslug.ts","./src/hooks/userealtimeboard.ts","./src/lib/extensionauth.ts","./src/lib/isextension.ts","./src/lib/problemslug.ts"],"version":"5.9.3"}
