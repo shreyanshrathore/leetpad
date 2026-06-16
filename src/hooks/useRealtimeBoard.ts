@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore'
 import type { TLEditorSnapshot } from 'tldraw'
 import { db } from '../firebase'
+import { isExtensionContext } from '../lib/isExtension'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 export type PreviewStatus = 'idle' | 'syncing' | 'synced'
@@ -15,10 +16,12 @@ export type PreviewStatus = 'idle' | 'syncing' | 'synced'
 interface BoardDocument {
   boardData: TLEditorSnapshot | null
   updatedAt: Timestamp | null
+  clientId?: string
 }
 
-const PREVIEW_IDLE_MS = 1000
-const PREVIEW_MIN_INTERVAL_MS = 1500
+const PREVIEW_IDLE_MS = 1200
+const PREVIEW_MIN_INTERVAL_MS = 2000
+const LOCAL_EDIT_LOCK_MS = 2500
 
 function getSavedBoardRef(userId: string, problemSlug: string) {
   return doc(db, 'users', userId, 'boards', problemSlug)
@@ -28,18 +31,22 @@ function getPreviewRef(userId: string, problemSlug: string) {
   return doc(db, 'users', userId, 'previews', problemSlug)
 }
 
-function hasBoardContent(snapshot: TLEditorSnapshot | null | undefined): boolean {
-  if (!snapshot) return false
-  const store = (snapshot as { store?: { records?: Record<string, unknown> } }).store
-  const records = store?.records
-  if (!records) return false
-  return Object.keys(records).length > 0
+function snapshotKey(snapshot: TLEditorSnapshot | null): string {
+  return snapshot ? JSON.stringify(snapshot) : '__empty__'
 }
 
 /**
  * Preview sync while drawing + manual save to the persisted board.
+ * iPad edits locally; extension mirrors preview updates only.
  */
 export function useRealtimeBoard(userId: string | null, problemSlug: string | null) {
+  const isMirrorDevice = isExtensionContext()
+  const clientIdRef = useRef(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `client-${Date.now()}`,
+  )
+
   const [initialSnapshot, setInitialSnapshot] = useState<TLEditorSnapshot | null>(null)
   const [remoteSnapshot, setRemoteSnapshot] = useState<TLEditorSnapshot | null>(null)
   const [ready, setReady] = useState(false)
@@ -50,13 +57,29 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
 
   const latestLocalRef = useRef<TLEditorSnapshot | null>(null)
   const getSnapshotRef = useRef<(() => TLEditorSnapshot | null) | null>(null)
-  const isDrawingRef = useRef(false)
+  const isEditingRef = useRef(false)
   const idleTimerRef = useRef<number | null>(null)
+  const editLockTimerRef = useRef<number | null>(null)
   const pendingPreviewRef = useRef<TLEditorSnapshot | null>(null)
   const previewThrottleTimerRef = useRef<number | null>(null)
   const lastPreviewWriteRef = useRef(0)
+  const lastOwnPreviewKeyRef = useRef<string | null>(null)
   const initialLoadedRef = useRef(false)
   const savedLoadedRef = useRef(false)
+
+  const markLocalEdit = useCallback(() => {
+    isEditingRef.current = true
+    setIsDrawing(true)
+
+    if (editLockTimerRef.current) {
+      window.clearTimeout(editLockTimerRef.current)
+    }
+
+    editLockTimerRef.current = window.setTimeout(() => {
+      isEditingRef.current = false
+      setIsDrawing(false)
+    }, LOCAL_EDIT_LOCK_MS)
+  }, [])
 
   // Load the saved board once when opening a problem.
   useEffect(() => {
@@ -86,8 +109,9 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
           setInitialSnapshot(saved)
           setRemoteSnapshot(saved)
           latestLocalRef.current = saved
+          lastOwnPreviewKeyRef.current = snapshotKey(saved)
           setReady(true)
-          setSaveStatus(hasBoardContent(saved) ? 'saved' : 'idle')
+          setSaveStatus(docSnap.exists() ? 'saved' : 'idle')
         }
       },
       (err) => {
@@ -103,19 +127,25 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     }
   }, [userId, problemSlug])
 
-  // Listen for live preview updates from the other device.
+  // Extension mirrors iPad preview. iPad never applies preview back onto itself.
   useEffect(() => {
-    if (!userId || !problemSlug) return
+    if (!userId || !problemSlug || !isMirrorDevice) return
 
     const unsubscribe = onSnapshot(
       getPreviewRef(userId, problemSlug),
       (docSnap) => {
         if (!savedLoadedRef.current) return
+        if (isEditingRef.current) return
 
         const data = docSnap.data() as BoardDocument | undefined
         const preview = data?.boardData ?? null
-        if (!hasBoardContent(preview)) return
-        if (isDrawingRef.current) return
+        if (!preview) return
+
+        // Ignore preview writes that originated on this device.
+        if (data?.clientId === clientIdRef.current) return
+
+        const previewKey = snapshotKey(preview)
+        if (previewKey === lastOwnPreviewKeyRef.current) return
 
         setRemoteSnapshot(preview)
         setPreviewStatus('synced')
@@ -126,7 +156,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     )
 
     return unsubscribe
-  }, [userId, problemSlug])
+  }, [userId, problemSlug, isMirrorDevice])
 
   const flushPreview = useCallback(
     async (snapshot: TLEditorSnapshot) => {
@@ -151,6 +181,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       }
 
       lastPreviewWriteRef.current = now
+      lastOwnPreviewKeyRef.current = snapshotKey(snapshot)
       setPreviewStatus('syncing')
 
       try {
@@ -158,6 +189,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
           getPreviewRef(userId, problemSlug),
           {
             boardData: snapshot,
+            clientId: clientIdRef.current,
             updatedAt: serverTimestamp(),
           },
           { merge: true },
@@ -176,20 +208,17 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
   const onLocalChange = useCallback(
     (nextSnapshot: TLEditorSnapshot) => {
       latestLocalRef.current = nextSnapshot
-      isDrawingRef.current = true
-      setIsDrawing(true)
+      markLocalEdit()
 
       if (idleTimerRef.current) {
         window.clearTimeout(idleTimerRef.current)
       }
 
       idleTimerRef.current = window.setTimeout(() => {
-        isDrawingRef.current = false
-        setIsDrawing(false)
         void flushPreview(nextSnapshot)
       }, PREVIEW_IDLE_MS)
     },
-    [flushPreview],
+    [flushPreview, markLocalEdit],
   )
 
   const registerGetSnapshot = useCallback((getter: () => TLEditorSnapshot | null) => {
@@ -200,8 +229,8 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     if (!userId || !problemSlug) return
 
     const snapshot = getSnapshotRef.current?.() ?? latestLocalRef.current
-    if (!snapshot || !hasBoardContent(snapshot)) {
-      setError('Nothing to save yet. Draw something first.')
+    if (!snapshot) {
+      setError('Canvas is not ready yet.')
       return
     }
 
@@ -217,18 +246,23 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
         { merge: true },
       )
 
-      // Keep preview in sync after an explicit save.
       await setDoc(
         getPreviewRef(userId, problemSlug),
         {
           boardData: snapshot,
+          clientId: clientIdRef.current,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
       )
 
       latestLocalRef.current = snapshot
-      setRemoteSnapshot(snapshot)
+      lastOwnPreviewKeyRef.current = snapshotKey(snapshot)
+
+      if (isMirrorDevice) {
+        setRemoteSnapshot(snapshot)
+      }
+
       setSaveStatus('saved')
       setPreviewStatus('synced')
       setError(null)
@@ -238,11 +272,12 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       setError(message)
       setSaveStatus('error')
     }
-  }, [userId, problemSlug])
+  }, [userId, problemSlug, isMirrorDevice])
 
   useEffect(() => {
     return () => {
       if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current)
+      if (editLockTimerRef.current) window.clearTimeout(editLockTimerRef.current)
       if (previewThrottleTimerRef.current) {
         window.clearTimeout(previewThrottleTimerRef.current)
       }
@@ -260,5 +295,6 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     onLocalChange,
     saveBoard,
     registerGetSnapshot,
+    enableRemoteSync: isMirrorDevice,
   }
 }

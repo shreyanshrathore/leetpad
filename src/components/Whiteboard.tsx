@@ -17,35 +17,60 @@ interface WhiteboardProps {
   readonly remoteSnapshot: TLEditorSnapshot | null
   readonly ready: boolean
   readonly isDrawing: boolean
+  readonly enableRemoteSync: boolean
   readonly onChange: (snapshot: TLEditorSnapshot) => void
+}
+
+function replaceSnapshot(editor: Editor, snapshot: TLEditorSnapshot | null) {
+  editor.store.mergeRemoteChanges(() => {
+    if (snapshot) {
+      loadSnapshot(editor.store, snapshot)
+      return
+    }
+    editor.store.clear()
+  })
 }
 
 export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
   function Whiteboard(
-    { initialSnapshot, remoteSnapshot, ready, isDrawing, onChange },
+    {
+      initialSnapshot,
+      remoteSnapshot,
+      ready,
+      isDrawing,
+      enableRemoteSync,
+      onChange,
+    },
     ref,
   ) {
     const editorRef = useRef<Editor | null>(null)
     const initialAppliedRef = useRef(false)
-    const loadedRemoteRef = useRef<string | null>(null)
+    const loadedSnapshotKeyRef = useRef<string | null>(null)
     const isApplyingRemoteRef = useRef(false)
+
+    const applySnapshot = useCallback((snapshot: TLEditorSnapshot | null) => {
+      const editor = editorRef.current
+      if (!editor) return
+
+      const nextKey = snapshot ? JSON.stringify(snapshot) : '__empty__'
+      if (loadedSnapshotKeyRef.current === nextKey) return
+
+      isApplyingRemoteRef.current = true
+      replaceSnapshot(editor, snapshot)
+      loadedSnapshotKeyRef.current = nextKey
+
+      window.setTimeout(() => {
+        isApplyingRemoteRef.current = false
+      }, 150)
+    }, [])
 
     const applyInitialSnapshot = useCallback(() => {
       const editor = editorRef.current
       if (!editor || !ready || initialAppliedRef.current) return
 
       initialAppliedRef.current = true
-      isApplyingRemoteRef.current = true
-
-      if (initialSnapshot) {
-        loadSnapshot(editor.store, initialSnapshot)
-        loadedRemoteRef.current = JSON.stringify(initialSnapshot)
-      }
-
-      window.setTimeout(() => {
-        isApplyingRemoteRef.current = false
-      }, 100)
-    }, [initialSnapshot, ready])
+      applySnapshot(initialSnapshot)
+    }, [applySnapshot, initialSnapshot, ready])
 
     useImperativeHandle(ref, () => ({
       getSnapshot: () => {
@@ -54,31 +79,17 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
       },
     }))
 
-    // Apply saved board once editor and Firestore data are both ready.
     useEffect(() => {
       applyInitialSnapshot()
     }, [applyInitialSnapshot])
 
-    // Apply preview updates from the other device.
     useEffect(() => {
-      const editor = editorRef.current
-      if (!editor || !ready || !initialAppliedRef.current) return
+      if (!enableRemoteSync) return
+      if (!ready || !initialAppliedRef.current) return
       if (isDrawing) return
 
-      const serialized = remoteSnapshot ? JSON.stringify(remoteSnapshot) : '__empty__'
-      if (loadedRemoteRef.current === serialized) return
-
-      isApplyingRemoteRef.current = true
-      if (remoteSnapshot) {
-        loadSnapshot(editor.store, remoteSnapshot)
-      }
-
-      loadedRemoteRef.current = serialized
-
-      window.setTimeout(() => {
-        isApplyingRemoteRef.current = false
-      }, 100)
-    }, [remoteSnapshot, ready, isDrawing])
+      applySnapshot(remoteSnapshot)
+    }, [applySnapshot, enableRemoteSync, isDrawing, ready, remoteSnapshot])
 
     return (
       <div className="whiteboard-container">
