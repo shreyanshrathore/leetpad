@@ -207,17 +207,17 @@ Hosted iPad URL format:
 https://your-deployed-app.web.app/?problem=two-sum
 ```
 
-## 5. Sync model (preview + save)
+## 5. Sync model (local edit + save)
 
 Flow:
 
-1. **Saved board** (`users/{userId}/boards/{problemSlug}`) loads when you open a problem
-2. While drawing, changes stay local (no Firestore overwrite)
-3. After you pause ~1 second, a **preview** syncs to `users/{userId}/previews/{problemSlug}`
-4. The other device shows preview updates only when it is not actively drawing
-5. Click **Save** to persist the final board to Firestore
+1. **One canvas per problem** — loads the last saved board when you open it
+2. **Draw and erase locally** on iPad — no Firestore reload during the session
+3. Click **Save** — writes the final board to `users/{userId}/boards/{problemSlug}`
+4. **Mac extension** mirrors when you press Save on iPad
+5. **Refresh** — reloads the last saved board
 
-This keeps drawing smooth and reduces Firestore writes compared to full realtime snapshot sync.
+This keeps erase/draw reliable and avoids overlapping strokes from constant sync.
 
 ## 6. Deployment
 

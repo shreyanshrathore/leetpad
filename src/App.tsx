@@ -5,23 +5,7 @@ import { useAuth } from './hooks/useAuth'
 import { useProblemSlug } from './hooks/useProblemSlug'
 import { useRealtimeBoard } from './hooks/useRealtimeBoard'
 
-function StatusText({
-  saveStatus,
-  previewStatus,
-  isDrawing,
-}: {
-  saveStatus: string
-  previewStatus: string
-  isDrawing: boolean
-}) {
-  if (isDrawing) {
-    return <span className="save-status save-status--saving">Drawing...</span>
-  }
-
-  if (previewStatus === 'syncing') {
-    return <span className="save-status save-status--saving">Syncing preview...</span>
-  }
-
+function StatusText({ saveStatus }: { saveStatus: string }) {
   if (saveStatus === 'saving') {
     return <span className="save-status save-status--saving">Saving...</span>
   }
@@ -30,15 +14,11 @@ function StatusText({
     return <span className="save-status save-status--saved">Saved</span>
   }
 
-  if (previewStatus === 'synced') {
-    return <span className="save-status save-status--saved">Preview synced</span>
-  }
-
   if (saveStatus === 'error') {
     return <span className="save-status save-status--error">Save failed</span>
   }
 
-  return <span className="save-status">Ready</span>
+  return <span className="save-status">Unsaved changes</span>
 }
 
 function AppContent() {
@@ -47,12 +27,10 @@ function AppContent() {
     useProblemSlug()
   const {
     initialSnapshot,
-    remoteSnapshot,
+    incomingSnapshot,
     ready,
     saveStatus,
-    previewStatus,
     error,
-    isDrawing,
     onLocalChange,
     saveBoard,
     registerGetSnapshot,
@@ -111,11 +89,7 @@ function AppContent() {
           <h1>{slug}</h1>
         </div>
         <div className="header-actions">
-          <StatusText
-            saveStatus={saveStatus}
-            previewStatus={previewStatus}
-            isDrawing={isDrawing}
-          />
+          <StatusText saveStatus={saveStatus} />
           <button type="button" onClick={() => void saveBoard()}>
             Save
           </button>
@@ -134,9 +108,8 @@ function AppContent() {
           key={slug}
           ref={whiteboardRef}
           initialSnapshot={initialSnapshot}
-          remoteSnapshot={remoteSnapshot}
+          incomingSnapshot={incomingSnapshot}
           ready={ready}
-          isDrawing={isDrawing}
           enableRemoteSync={enableRemoteSync}
           onChange={onLocalChange}
         />

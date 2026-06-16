@@ -14,9 +14,8 @@ export interface WhiteboardHandle {
 
 interface WhiteboardProps {
   readonly initialSnapshot: TLEditorSnapshot | null
-  readonly remoteSnapshot: TLEditorSnapshot | null
+  readonly incomingSnapshot: TLEditorSnapshot | null
   readonly ready: boolean
-  readonly isDrawing: boolean
   readonly enableRemoteSync: boolean
   readonly onChange: (snapshot: TLEditorSnapshot) => void
 }
@@ -33,31 +32,34 @@ function replaceSnapshot(editor: Editor, snapshot: TLEditorSnapshot | null) {
 
 export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
   function Whiteboard(
-    {
-      initialSnapshot,
-      remoteSnapshot,
-      ready,
-      isDrawing,
-      enableRemoteSync,
-      onChange,
-    },
+    { initialSnapshot, incomingSnapshot, ready, enableRemoteSync, onChange },
     ref,
   ) {
     const editorRef = useRef<Editor | null>(null)
     const initialAppliedRef = useRef(false)
-    const loadedSnapshotKeyRef = useRef<string | null>(null)
+    const loadedKeyRef = useRef<string | null>(null)
     const isApplyingRemoteRef = useRef(false)
+
+    const notifyLocalChange = useCallback(
+      (editor: Editor) => {
+        if (isApplyingRemoteRef.current) return
+        const snapshot = getSnapshot(editor.store)
+        loadedKeyRef.current = JSON.stringify(snapshot)
+        onChange(snapshot)
+      },
+      [onChange],
+    )
 
     const applySnapshot = useCallback((snapshot: TLEditorSnapshot | null) => {
       const editor = editorRef.current
       if (!editor) return
 
       const nextKey = snapshot ? JSON.stringify(snapshot) : '__empty__'
-      if (loadedSnapshotKeyRef.current === nextKey) return
+      if (loadedKeyRef.current === nextKey) return
 
       isApplyingRemoteRef.current = true
       replaceSnapshot(editor, snapshot)
-      loadedSnapshotKeyRef.current = nextKey
+      loadedKeyRef.current = nextKey
 
       window.setTimeout(() => {
         isApplyingRemoteRef.current = false
@@ -84,12 +86,9 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
     }, [applyInitialSnapshot])
 
     useEffect(() => {
-      if (!enableRemoteSync) return
-      if (!ready || !initialAppliedRef.current) return
-      if (isDrawing) return
-
-      applySnapshot(remoteSnapshot)
-    }, [applySnapshot, enableRemoteSync, isDrawing, ready, remoteSnapshot])
+      if (!enableRemoteSync || !ready || !initialAppliedRef.current) return
+      applySnapshot(incomingSnapshot)
+    }, [applySnapshot, enableRemoteSync, incomingSnapshot, ready])
 
     return (
       <div className="whiteboard-container">
@@ -98,12 +97,12 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
             editorRef.current = editor
             applyInitialSnapshot()
 
+            // Listen to all user edits (draw, erase, delete) — not just document scope.
             editor.store.listen(
               () => {
-                if (isApplyingRemoteRef.current) return
-                onChange(getSnapshot(editor.store))
+                notifyLocalChange(editor)
               },
-              { source: 'user', scope: 'document' },
+              { source: 'user' },
             )
           }}
         />
