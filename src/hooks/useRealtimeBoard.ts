@@ -28,6 +28,14 @@ function getPreviewRef(userId: string, problemSlug: string) {
   return doc(db, 'users', userId, 'previews', problemSlug)
 }
 
+function hasBoardContent(snapshot: TLEditorSnapshot | null | undefined): boolean {
+  if (!snapshot) return false
+  const store = (snapshot as { store?: { records?: Record<string, unknown> } }).store
+  const records = store?.records
+  if (!records) return false
+  return Object.keys(records).length > 0
+}
+
 /**
  * Preview sync while drawing + manual save to the persisted board.
  */
@@ -41,12 +49,14 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
   const [isDrawing, setIsDrawing] = useState(false)
 
   const latestLocalRef = useRef<TLEditorSnapshot | null>(null)
+  const getSnapshotRef = useRef<(() => TLEditorSnapshot | null) | null>(null)
   const isDrawingRef = useRef(false)
   const idleTimerRef = useRef<number | null>(null)
   const pendingPreviewRef = useRef<TLEditorSnapshot | null>(null)
   const previewThrottleTimerRef = useRef<number | null>(null)
   const lastPreviewWriteRef = useRef(0)
   const initialLoadedRef = useRef(false)
+  const savedLoadedRef = useRef(false)
 
   // Load the saved board once when opening a problem.
   useEffect(() => {
@@ -55,12 +65,14 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       setRemoteSnapshot(null)
       setReady(false)
       initialLoadedRef.current = false
+      savedLoadedRef.current = false
       return
     }
 
     setReady(false)
     setError(null)
     initialLoadedRef.current = false
+    savedLoadedRef.current = false
 
     const unsubscribe = onSnapshot(
       getSavedBoardRef(userId, problemSlug),
@@ -70,11 +82,12 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
 
         if (!initialLoadedRef.current) {
           initialLoadedRef.current = true
+          savedLoadedRef.current = true
           setInitialSnapshot(saved)
           setRemoteSnapshot(saved)
           latestLocalRef.current = saved
           setReady(true)
-          setSaveStatus(saved ? 'saved' : 'idle')
+          setSaveStatus(hasBoardContent(saved) ? 'saved' : 'idle')
         }
       },
       (err) => {
@@ -86,6 +99,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     return () => {
       unsubscribe()
       initialLoadedRef.current = false
+      savedLoadedRef.current = false
     }
   }, [userId, problemSlug])
 
@@ -96,11 +110,11 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     const unsubscribe = onSnapshot(
       getPreviewRef(userId, problemSlug),
       (docSnap) => {
+        if (!savedLoadedRef.current) return
+
         const data = docSnap.data() as BoardDocument | undefined
         const preview = data?.boardData ?? null
-        if (!preview) return
-
-        // Do not overwrite local strokes while the user is actively drawing.
+        if (!hasBoardContent(preview)) return
         if (isDrawingRef.current) return
 
         setRemoteSnapshot(preview)
@@ -169,7 +183,6 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
         window.clearTimeout(idleTimerRef.current)
       }
 
-      // After the user pauses, push a lightweight preview update.
       idleTimerRef.current = window.setTimeout(() => {
         isDrawingRef.current = false
         setIsDrawing(false)
@@ -179,11 +192,18 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     [flushPreview],
   )
 
+  const registerGetSnapshot = useCallback((getter: () => TLEditorSnapshot | null) => {
+    getSnapshotRef.current = getter
+  }, [])
+
   const saveBoard = useCallback(async () => {
     if (!userId || !problemSlug) return
 
-    const snapshot = latestLocalRef.current
-    if (!snapshot) return
+    const snapshot = getSnapshotRef.current?.() ?? latestLocalRef.current
+    if (!snapshot || !hasBoardContent(snapshot)) {
+      setError('Nothing to save yet. Draw something first.')
+      return
+    }
 
     setSaveStatus('saving')
 
@@ -196,7 +216,21 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
         },
         { merge: true },
       )
+
+      // Keep preview in sync after an explicit save.
+      await setDoc(
+        getPreviewRef(userId, problemSlug),
+        {
+          boardData: snapshot,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
+
+      latestLocalRef.current = snapshot
+      setRemoteSnapshot(snapshot)
       setSaveStatus('saved')
+      setPreviewStatus('synced')
       setError(null)
     } catch (err) {
       const message =
@@ -225,5 +259,6 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
     isDrawing,
     onLocalChange,
     saveBoard,
+    registerGetSnapshot,
   }
 }

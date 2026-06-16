@@ -1,5 +1,6 @@
+import { useEffect, useRef } from 'react'
 import { AuthGate } from './components/AuthGate'
-import { Whiteboard } from './components/Whiteboard'
+import { Whiteboard, type WhiteboardHandle } from './components/Whiteboard'
 import { useAuth } from './hooks/useAuth'
 import { useProblemSlug } from './hooks/useProblemSlug'
 import { useRealtimeBoard } from './hooks/useRealtimeBoard'
@@ -54,7 +55,14 @@ function AppContent() {
     isDrawing,
     onLocalChange,
     saveBoard,
+    registerGetSnapshot,
   } = useRealtimeBoard(user?.uid ?? null, slug)
+
+  const whiteboardRef = useRef<WhiteboardHandle>(null)
+
+  useEffect(() => {
+    registerGetSnapshot(() => whiteboardRef.current?.getSnapshot() ?? null)
+  }, [registerGetSnapshot])
 
   if (loading) {
     return <div className="centered-message">Detecting LeetCode problem...</div>
@@ -122,6 +130,8 @@ function AppContent() {
         <div className="centered-message">Loading whiteboard...</div>
       ) : (
         <Whiteboard
+          key={slug}
+          ref={whiteboardRef}
           initialSnapshot={initialSnapshot}
           remoteSnapshot={remoteSnapshot}
           ready={ready}

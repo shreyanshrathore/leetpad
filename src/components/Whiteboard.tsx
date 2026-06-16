@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react'
 import {
   Tldraw,
   getSnapshot,
@@ -8,6 +8,10 @@ import {
 } from 'tldraw'
 import 'tldraw/tldraw.css'
 
+export interface WhiteboardHandle {
+  getSnapshot: () => TLEditorSnapshot | null
+}
+
 interface WhiteboardProps {
   readonly initialSnapshot: TLEditorSnapshot | null
   readonly remoteSnapshot: TLEditorSnapshot | null
@@ -16,72 +20,83 @@ interface WhiteboardProps {
   readonly onChange: (snapshot: TLEditorSnapshot) => void
 }
 
-export function Whiteboard({
-  initialSnapshot,
-  remoteSnapshot,
-  ready,
-  isDrawing,
-  onChange,
-}: WhiteboardProps) {
-  const editorRef = useRef<Editor | null>(null)
-  const initialAppliedRef = useRef(false)
-  const loadedRemoteRef = useRef<string | null>(null)
-  const isApplyingRemoteRef = useRef(false)
+export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
+  function Whiteboard(
+    { initialSnapshot, remoteSnapshot, ready, isDrawing, onChange },
+    ref,
+  ) {
+    const editorRef = useRef<Editor | null>(null)
+    const initialAppliedRef = useRef(false)
+    const loadedRemoteRef = useRef<string | null>(null)
+    const isApplyingRemoteRef = useRef(false)
 
-  // Load the saved board once on first open.
-  useEffect(() => {
-    const editor = editorRef.current
-    if (!editor || !ready || initialAppliedRef.current) return
+    const applyInitialSnapshot = useCallback(() => {
+      const editor = editorRef.current
+      if (!editor || !ready || initialAppliedRef.current) return
 
-    initialAppliedRef.current = true
+      initialAppliedRef.current = true
+      isApplyingRemoteRef.current = true
 
-    isApplyingRemoteRef.current = true
-    if (initialSnapshot) {
-      loadSnapshot(editor.store, initialSnapshot)
-      loadedRemoteRef.current = JSON.stringify(initialSnapshot)
-    }
+      if (initialSnapshot) {
+        loadSnapshot(editor.store, initialSnapshot)
+        loadedRemoteRef.current = JSON.stringify(initialSnapshot)
+      }
 
-    window.setTimeout(() => {
-      isApplyingRemoteRef.current = false
-    }, 100)
-  }, [initialSnapshot, ready])
+      window.setTimeout(() => {
+        isApplyingRemoteRef.current = false
+      }, 100)
+    }, [initialSnapshot, ready])
 
-  // Apply throttled preview updates from the other device.
-  useEffect(() => {
-    const editor = editorRef.current
-    if (!editor || !ready || !initialAppliedRef.current) return
-    if (isDrawing) return
+    useImperativeHandle(ref, () => ({
+      getSnapshot: () => {
+        const editor = editorRef.current
+        return editor ? getSnapshot(editor.store) : null
+      },
+    }))
 
-    const serialized = remoteSnapshot ? JSON.stringify(remoteSnapshot) : '__empty__'
-    if (loadedRemoteRef.current === serialized) return
+    // Apply saved board once editor and Firestore data are both ready.
+    useEffect(() => {
+      applyInitialSnapshot()
+    }, [applyInitialSnapshot])
 
-    isApplyingRemoteRef.current = true
-    if (remoteSnapshot) {
-      loadSnapshot(editor.store, remoteSnapshot)
-    }
+    // Apply preview updates from the other device.
+    useEffect(() => {
+      const editor = editorRef.current
+      if (!editor || !ready || !initialAppliedRef.current) return
+      if (isDrawing) return
 
-    loadedRemoteRef.current = serialized
+      const serialized = remoteSnapshot ? JSON.stringify(remoteSnapshot) : '__empty__'
+      if (loadedRemoteRef.current === serialized) return
 
-    window.setTimeout(() => {
-      isApplyingRemoteRef.current = false
-    }, 100)
-  }, [remoteSnapshot, ready, isDrawing])
+      isApplyingRemoteRef.current = true
+      if (remoteSnapshot) {
+        loadSnapshot(editor.store, remoteSnapshot)
+      }
 
-  return (
-    <div className="whiteboard-container">
-      <Tldraw
-        onMount={(editor) => {
-          editorRef.current = editor
+      loadedRemoteRef.current = serialized
 
-          editor.store.listen(
-            () => {
-              if (isApplyingRemoteRef.current) return
-              onChange(getSnapshot(editor.store))
-            },
-            { source: 'user', scope: 'document' },
-          )
-        }}
-      />
-    </div>
-  )
-}
+      window.setTimeout(() => {
+        isApplyingRemoteRef.current = false
+      }, 100)
+    }, [remoteSnapshot, ready, isDrawing])
+
+    return (
+      <div className="whiteboard-container">
+        <Tldraw
+          onMount={(editor) => {
+            editorRef.current = editor
+            applyInitialSnapshot()
+
+            editor.store.listen(
+              () => {
+                if (isApplyingRemoteRef.current) return
+                onChange(getSnapshot(editor.store))
+              },
+              { source: 'user', scope: 'document' },
+            )
+          }}
+        />
+      </div>
+    )
+  },
+)
