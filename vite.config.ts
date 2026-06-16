@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
         input: {
           main: resolve(__dirname, 'index.html'),
           sidepanel: resolve(__dirname, 'sidepanel.html'),
+          embed: resolve(__dirname, 'embed.html'),
         },
         output: {
           entryFileNames: 'assets/[name]-[hash].js',

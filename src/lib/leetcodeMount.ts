@@ -163,8 +163,25 @@ export function getWhiteboardRoot(): HTMLElement | null {
   return document.getElementById(ROOT_ID)
 }
 
-function isMountedInDom(): boolean {
-  return Boolean(document.getElementById(TAB_ID) && document.getElementById(PANEL_ID))
+function ensureTabButton(
+  tabContainer: HTMLElement,
+  showWhiteboard: () => void,
+): HTMLDivElement {
+  let tabButton = document.getElementById(TAB_ID) as HTMLDivElement | null
+
+  if (!tabButton) {
+    tabButton = createTabButton()
+    tabContainer.appendChild(tabButton)
+  } else if (!tabContainer.contains(tabButton)) {
+    tabContainer.appendChild(tabButton)
+  }
+
+  if (!tabButton.dataset.lcWhiteboardBound) {
+    tabButton.dataset.lcWhiteboardBound = 'true'
+    bindTabActivation(tabButton, showWhiteboard)
+  }
+
+  return tabButton
 }
 
 export function mountLeetCodeWhiteboardUi(
@@ -174,13 +191,7 @@ export function mountLeetCodeWhiteboardUi(
   const tabContainer = tabset ? getTabContainer(tabset) : null
   if (!tabset || !tabContainer) return null
 
-  let tabButton = document.getElementById(TAB_ID) as HTMLDivElement | null
   let panel = document.getElementById(PANEL_ID) as HTMLDivElement | null
-
-  if (!tabButton) {
-    tabButton = createTabButton()
-    tabContainer.appendChild(tabButton)
-  }
 
   if (!panel) {
     panel = createPanel(tabset)
@@ -191,9 +202,11 @@ export function mountLeetCodeWhiteboardUi(
   syncPanelGeometry(panel, tabset)
 
   let active = false
+  let tabButton: HTMLDivElement
 
   const showWhiteboard = () => {
     active = true
+    tabButton = ensureTabButton(tabContainer, showWhiteboard)
     syncPanelGeometry(panel, tabset)
     clearNativeTabSelection(tabset)
     setNativeTabSelected(tabButton, true)
@@ -206,6 +219,7 @@ export function mountLeetCodeWhiteboardUi(
 
   const hideWhiteboard = () => {
     active = false
+    tabButton = ensureTabButton(tabContainer, showWhiteboard)
     setNativeTabSelected(tabButton, false)
     tabButton.setAttribute('aria-selected', 'false')
     panel.hidden = true
@@ -213,10 +227,7 @@ export function mountLeetCodeWhiteboardUi(
     showLeftPanelContent()
   }
 
-  if (!tabButton.dataset.lcWhiteboardBound) {
-    tabButton.dataset.lcWhiteboardBound = 'true'
-    bindTabActivation(tabButton, showWhiteboard)
-  }
+  tabButton = ensureTabButton(tabContainer, showWhiteboard)
 
   const detachNativeListeners = attachNativeTabListeners(tabset, hideWhiteboard)
 
@@ -226,7 +237,7 @@ export function mountLeetCodeWhiteboardUi(
     isWhiteboardActive: () => active,
     destroy: () => {
       detachNativeListeners()
-      tabButton.remove()
+      document.getElementById(TAB_ID)?.remove()
       panel.remove()
     },
   }
@@ -248,9 +259,22 @@ export function waitForLeetCodeLayout(callbacks: LeetCodeLayoutCallbacks): () =>
       return
     }
 
-    if (isMountedInDom() && handles) return
+    const tabset = getLeftPanelTabset()
+    const tabContainer = tabset ? getTabContainer(tabset) : null
+    if (!tabset || !tabContainer) return
 
     if (handles) {
+      // LeetCode often re-renders the native tab strip — re-pin our tab.
+      if (!document.getElementById(TAB_ID)) {
+        ensureTabButton(tabContainer, handles.showWhiteboard)
+      }
+
+      const panel = document.getElementById(PANEL_ID)
+      if (panel && tabset.contains(panel)) {
+        syncPanelGeometry(panel, tabset)
+        return
+      }
+
       destroyHandles()
     }
 
@@ -264,7 +288,7 @@ export function waitForLeetCodeLayout(callbacks: LeetCodeLayoutCallbacks): () =>
   let debounceTimer: number | null = null
   const scheduleTryMount = () => {
     if (debounceTimer) window.clearTimeout(debounceTimer)
-    debounceTimer = window.setTimeout(tryMount, 100)
+    debounceTimer = window.setTimeout(tryMount, 50)
   }
 
   const observer = new MutationObserver(() => {

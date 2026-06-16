@@ -1,0 +1,77 @@
+/* Injected tab + panel shell on leetcode.com (content script only) */
+
+.lc-whiteboard-tab {
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+  min-width: 6rem;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+}
+
+.lc-whiteboard-tab__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 150px;
+  font-size: 14px;
+  line-height: normal;
+  color: var(--lc-wb-tab-text, #eff1f6);
+}
+
+.lc-whiteboard-tab__icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.85;
+}
+
+.lc-whiteboard-tab:hover .lc-whiteboard-tab__label {
+  color: var(--lc-wb-tab-text-hover, #ffffff);
+}
+
+.lc-whiteboard-tab--selected .lc-whiteboard-tab__label {
+  color: var(--lc-wb-tab-text-active, #ffffff);
+}
+
+.lc-whiteboard-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--lc-wb-panel-bg, #1a1a1a);
+  border-top: 1px solid var(--lc-wb-panel-border, #3a3a3a);
+}
+
+.lc-whiteboard-panel:not([hidden]) {
+  display: flex;
+}
+
+.lc-whiteboard-panel[hidden] {
+  display: none !important;
+}
+
+.lc-whiteboard-root {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lc-whiteboard-iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  display: block;
+  background: #000000;
+}

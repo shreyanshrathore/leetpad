@@ -64,7 +64,7 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       return
     }
 
-    setReady(false)
+    setReady(true)
     setError(null)
     initialLoadedRef.current = false
     lastLoadedKeyRef.current = null

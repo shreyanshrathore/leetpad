@@ -83,6 +83,15 @@ input {
 .whiteboard-container {
   flex: 1;
   min-height: 0;
+  background: #000000;
+}
+
+.whiteboard-container .tl-container {
+  --color-background: #000000;
+}
+
+.whiteboard-container .tl-background {
+  background-color: #000000;
 }
 
 .auth-screen,
@@ -168,13 +177,13 @@ input {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #f9fafb;
-    background: #111827;
+    color: #eff1f6;
+    background: #1a1a1a;
   }
 
   .app-header {
-    background: #1f2937;
-    border-bottom-color: #374151;
+    background: #282828;
+    border-bottom-color: #3a3a3a;
   }
 
   .auth-screen p,
@@ -192,9 +201,9 @@ input {
   }
 
   input {
-    background: #111827;
-    color: #f9fafb;
-    border-color: #4b5563;
+    background: #1a1a1a;
+    color: #eff1f6;
+    border-color: #4a4a4a;
   }
 
   .error-banner {

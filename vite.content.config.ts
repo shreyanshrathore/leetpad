@@ -1,18 +1,16 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
-/** Self-contained content-script bundle (no ES module imports). */
+/** Lightweight content-script bundle: DOM injection + iframe only. */
 export default defineConfig({
   base: './',
-  plugins: [react()],
   build: {
     outDir: 'dist',
     emptyOutDir: false,
     copyPublicDir: false,
     cssCodeSplit: false,
     rollupOptions: {
-      input: resolve(__dirname, 'src/content.tsx'),
+      input: resolve(__dirname, 'src/content.ts'),
       output: {
         format: 'iife',
         name: 'LCWhiteboardContent',

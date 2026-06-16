@@ -108,18 +108,14 @@ function AppContent({ mode }: { readonly mode: AppMode }) {
 
       {error ? <p className="error-banner">{error}</p> : null}
 
-      {!ready ? (
-        <div className="centered-message">Loading whiteboard...</div>
-      ) : (
-        <Whiteboard
-          key={slug}
-          ref={whiteboardRef}
-          initialSnapshot={initialSnapshot}
-          incomingSnapshot={incomingSnapshot}
-          ready={ready}
-          onChange={onLocalChange}
-        />
-      )}
+      <Whiteboard
+        key={slug}
+        ref={whiteboardRef}
+        initialSnapshot={initialSnapshot}
+        incomingSnapshot={incomingSnapshot}
+        ready={ready}
+        onChange={onLocalChange}
+      />
     </div>
   )
 }

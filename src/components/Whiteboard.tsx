@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react'
 import {
   Tldraw,
+  DefaultColorStyle,
   getSnapshot,
   loadSnapshot,
   type Editor,
@@ -94,6 +95,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
         <Tldraw
           onMount={(editor) => {
             editorRef.current = editor
+            editor.setStyleForNextShapes(DefaultColorStyle, 'white')
             applyInitialSnapshot()
 
             // Listen to all user edits (draw, erase, delete) — not just document scope.
