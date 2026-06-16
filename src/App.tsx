@@ -4,8 +4,9 @@ import { Whiteboard, type WhiteboardHandle } from './components/Whiteboard'
 import { useAuth } from './hooks/useAuth'
 import { useProblemSlug } from './hooks/useProblemSlug'
 import { useRealtimeBoard } from './hooks/useRealtimeBoard'
+import type { AppMode } from './lib/runtimeContext'
 
-function StatusText({ saveStatus }: { saveStatus: string }) {
+function StatusText({ saveStatus }: { readonly saveStatus: string }) {
   if (saveStatus === 'saving') {
     return <span className="save-status save-status--saving">Saving...</span>
   }
@@ -21,7 +22,8 @@ function StatusText({ saveStatus }: { saveStatus: string }) {
   return <span className="save-status">Unsaved changes</span>
 }
 
-function AppContent() {
+function AppContent({ mode }: { readonly mode: AppMode }) {
+  const embedded = mode === 'embedded'
   const { user, logout } = useAuth()
   const { slug, loading, needsManualInput, manualSlug, setManualSlug, commitManualSlug } =
     useProblemSlug()
@@ -43,10 +45,14 @@ function AppContent() {
   }, [registerGetSnapshot])
 
   if (loading) {
-    return <div className="centered-message">Detecting LeetCode problem...</div>
+    return (
+      <div className="centered-message">
+        {embedded ? 'Loading whiteboard...' : 'Detecting LeetCode problem...'}
+      </div>
+    )
   }
 
-  if (needsManualInput) {
+  if (!embedded && needsManualInput) {
     return (
       <div className="auth-screen">
         <h1>Choose a problem</h1>
@@ -75,16 +81,18 @@ function AppContent() {
   if (!slug) {
     return (
       <div className="centered-message">
-        Open a LeetCode problem page to use the whiteboard.
+        {embedded
+          ? 'Navigate to a LeetCode problem to use the whiteboard.'
+          : 'Open a LeetCode problem page to use the whiteboard.'}
       </div>
     )
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${embedded ? ' app-shell--embedded' : ''}`}>
       <header className="app-header">
         <div>
-          <p className="eyebrow">LeetCode problem</p>
+          {!embedded ? <p className="eyebrow">LeetCode problem</p> : null}
           <h1>{slug}</h1>
         </div>
         <div className="header-actions">
@@ -116,10 +124,14 @@ function AppContent() {
   )
 }
 
-export default function App() {
+interface AppProps {
+  readonly mode?: AppMode
+}
+
+export default function App({ mode = 'standalone' }: AppProps) {
   return (
-    <AuthGate>
-      <AppContent />
+    <AuthGate compact={mode === 'embedded'}>
+      <AppContent mode={mode} />
     </AuthGate>
   )
 }

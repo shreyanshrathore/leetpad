@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
 import * as webAuth from 'firebase/auth'
+import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth'
 import * as extensionAuth from 'firebase/auth/web-extension'
 import { auth, googleProvider } from '../firebase'
 import { signInWithGoogleExtension } from '../lib/extensionAuth'
-import { isExtensionContext } from '../lib/isExtension'
+import {
+  isContentScriptContext,
+  isExtensionPageContext,
+  isExtensionRuntime,
+} from '../lib/runtimeContext'
 import type { User } from 'firebase/auth'
 
-const authApi = isExtensionContext() ? extensionAuth : webAuth
+const extensionPage = isExtensionPageContext()
+const contentScript = isContentScriptContext()
+const authApi = extensionPage ? extensionAuth : webAuth
 
 function getErrorMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
@@ -16,11 +23,23 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Failed to sign in with Google'
 }
 
+async function signInFromContentScript(): Promise<void> {
+  const response = (await chrome.runtime.sendMessage({
+    type: 'GOOGLE_SIGN_IN',
+  })) as { ok?: boolean; accessToken?: string; error?: string }
+
+  if (!response?.ok || !response.accessToken) {
+    throw new Error(response?.error ?? 'Sign-in failed')
+  }
+
+  const credential = GoogleAuthProvider.credential(null, response.accessToken)
+  await signInWithCredential(auth, credential)
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const inExtension = isExtensionContext()
 
   useEffect(() => {
     const unsubscribe = authApi.onAuthStateChanged(auth, (nextUser) => {
@@ -34,8 +53,10 @@ export function useAuth() {
   async function signInWithGoogle() {
     setError(null)
     try {
-      if (inExtension) {
+      if (extensionPage) {
         await signInWithGoogleExtension()
+      } else if (contentScript) {
+        await signInFromContentScript()
       } else {
         await webAuth.signInWithPopup(auth, googleProvider)
       }
@@ -55,6 +76,6 @@ export function useAuth() {
     error,
     signInWithGoogle,
     logout,
-    inExtension,
+    inExtension: isExtensionRuntime(),
   }
 }

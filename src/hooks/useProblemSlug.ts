@@ -3,13 +3,17 @@ import {
   extractProblemSlug,
   extractProblemSlugFromQuery,
 } from '../lib/problemSlug'
+import {
+  isContentScriptContext,
+  isExtensionPageContext,
+} from '../lib/runtimeContext'
 
-function isExtensionContext(): boolean {
-  return typeof chrome !== 'undefined' && Boolean(chrome.tabs?.query)
+function isSidePanelContext(): boolean {
+  return isExtensionPageContext() && Boolean(chrome.tabs?.query)
 }
 
 async function getActiveTabUrl(): Promise<string | null> {
-  if (!isExtensionContext()) return null
+  if (!isSidePanelContext()) return null
 
   return new Promise((resolve) => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -43,6 +47,15 @@ export function useProblemSlug() {
         return
       }
 
+      if (isContentScriptContext()) {
+        const pageSlug = extractProblemSlug(window.location.href)
+        if (!cancelled) {
+          setSlug(pageSlug)
+          setLoading(false)
+        }
+        return
+      }
+
       const tabUrl = await getActiveTabUrl()
       const tabSlug = tabUrl ? extractProblemSlug(tabUrl) : null
 
@@ -54,7 +67,7 @@ export function useProblemSlug() {
 
     detectSlug()
 
-    if (isExtensionContext()) {
+    if (isSidePanelContext()) {
       const onTabUpdated = (
         _tabId: number,
         changeInfo: chrome.tabs.TabChangeInfo,
@@ -70,6 +83,22 @@ export function useProblemSlug() {
       return () => {
         cancelled = true
         chrome.tabs.onUpdated.removeListener(onTabUpdated)
+      }
+    }
+
+    if (isContentScriptContext()) {
+      const onUrlChange = () => {
+        setSlug(extractProblemSlug(window.location.href))
+      }
+
+      window.addEventListener('popstate', onUrlChange)
+      const observer = new MutationObserver(onUrlChange)
+      observer.observe(document.documentElement, { childList: true, subtree: true })
+
+      return () => {
+        cancelled = true
+        window.removeEventListener('popstate', onUrlChange)
+        observer.disconnect()
       }
     }
 
