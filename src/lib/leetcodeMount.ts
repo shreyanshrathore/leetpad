@@ -10,6 +10,12 @@ export interface LeetCodeMountHandles {
   destroy: () => void
 }
 
+export interface LeetCodeLayoutCallbacks {
+  onReady: () => void
+  onTeardown: () => void
+  onActivate: () => void
+}
+
 function getLeftPanelTabset(): HTMLElement | null {
   const tabbar = document.querySelector('#description_tabbar_outer')
   return tabbar?.closest('.flexlayout__tabset') as HTMLElement | null
@@ -22,11 +28,17 @@ function getTabContainer(tabset: HTMLElement): HTMLElement | null {
 }
 
 function getLeftPanelTabs(): HTMLElement[] {
-  const midpoint = window.innerWidth / 2
+  const tabset = getLeftPanelTabset()
+  if (!tabset) return []
+
+  const tabsetRect = tabset.getBoundingClientRect()
 
   return Array.from(document.querySelectorAll('.flexlayout__tab')).filter((el) => {
     const rect = el.getBoundingClientRect()
-    return rect.width > 80 && rect.height > 80 && rect.x < midpoint
+    if (rect.width < 80 || rect.height < 80) return false
+
+    const centerX = rect.left + rect.width / 2
+    return centerX >= tabsetRect.left && centerX <= tabsetRect.right
   }) as HTMLElement[]
 }
 
@@ -63,6 +75,12 @@ function showLeftPanelContent() {
   })
 }
 
+function syncPanelGeometry(panel: HTMLElement, tabset: HTMLElement) {
+  const tabbar = tabset.querySelector('#description_tabbar_outer')
+  const tabbarHeight = tabbar?.getBoundingClientRect().height ?? 36
+  panel.style.top = `${tabbarHeight}px`
+}
+
 function createTabButton(): HTMLDivElement {
   const button = document.createElement('div')
   button.id = TAB_ID
@@ -70,6 +88,7 @@ function createTabButton(): HTMLDivElement {
     'flexlayout__tab_button flexlayout__tab_button_top lc-whiteboard-tab'
   button.setAttribute('role', 'tab')
   button.setAttribute('aria-selected', 'false')
+  button.setAttribute('tabindex', '0')
   button.innerHTML = `
     <div class="flexlayout__tab_button_content">
       <div class="relative flex items-center gap-1 overflow-hidden text-sm capitalize lc-whiteboard-tab__label">
@@ -88,10 +107,7 @@ function createPanel(tabset: HTMLElement): HTMLDivElement {
   panel.id = PANEL_ID
   panel.className = 'lc-whiteboard-panel'
   panel.hidden = true
-
-  const tabbar = tabset.querySelector('#description_tabbar_outer')
-  const tabbarHeight = tabbar?.getBoundingClientRect().height ?? 36
-  panel.style.top = `${tabbarHeight}px`
+  syncPanelGeometry(panel, tabset)
 
   const root = document.createElement('div')
   root.id = ROOT_ID
@@ -102,6 +118,25 @@ function createPanel(tabset: HTMLElement): HTMLDivElement {
   return panel
 }
 
+function bindTabActivation(
+  tabButton: HTMLDivElement,
+  showWhiteboard: () => void,
+): void {
+  const activate = (event: Event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    showWhiteboard()
+  }
+
+  tabButton.addEventListener('mousedown', activate, true)
+  tabButton.addEventListener('click', activate, true)
+  tabButton.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      activate(event)
+    }
+  })
+}
+
 function attachNativeTabListeners(
   tabset: HTMLElement,
   onNativeTabSelected: () => void,
@@ -109,22 +144,32 @@ function attachNativeTabListeners(
   const tabbar = tabset.querySelector('#description_tabbar_outer')
   if (!tabbar) return () => undefined
 
-  const onClick = (event: Event) => {
+  const onPointerDown = (event: Event) => {
     const target = event.target as HTMLElement | null
     const button = target?.closest('.flexlayout__tab_button')
     if (!button || button.id === TAB_ID) return
     onNativeTabSelected()
   }
 
-  tabbar.addEventListener('click', onClick, true)
-  return () => tabbar.removeEventListener('click', onClick, true)
+  tabbar.addEventListener('mousedown', onPointerDown, true)
+  tabbar.addEventListener('click', onPointerDown, true)
+  return () => {
+    tabbar.removeEventListener('mousedown', onPointerDown, true)
+    tabbar.removeEventListener('click', onPointerDown, true)
+  }
 }
 
 export function getWhiteboardRoot(): HTMLElement | null {
   return document.getElementById(ROOT_ID)
 }
 
-export function mountLeetCodeWhiteboardUi(): LeetCodeMountHandles | null {
+function isMountedInDom(): boolean {
+  return Boolean(document.getElementById(TAB_ID) && document.getElementById(PANEL_ID))
+}
+
+export function mountLeetCodeWhiteboardUi(
+  callbacks: Pick<LeetCodeLayoutCallbacks, 'onActivate'>,
+): LeetCodeMountHandles | null {
   const tabset = getLeftPanelTabset()
   const tabContainer = tabset ? getTabContainer(tabset) : null
   if (!tabset || !tabContainer) return null
@@ -139,34 +184,38 @@ export function mountLeetCodeWhiteboardUi(): LeetCodeMountHandles | null {
 
   if (!panel) {
     panel = createPanel(tabset)
+  } else if (!panel.isConnected || panel.parentElement !== tabset) {
+    tabset.appendChild(panel)
   }
+
+  syncPanelGeometry(panel, tabset)
 
   let active = false
 
   const showWhiteboard = () => {
     active = true
+    syncPanelGeometry(panel, tabset)
     clearNativeTabSelection(tabset)
-    setNativeTabSelected(tabButton!, true)
-    tabButton!.setAttribute('aria-selected', 'true')
-    panel!.hidden = false
+    setNativeTabSelected(tabButton, true)
+    tabButton.setAttribute('aria-selected', 'true')
+    panel.hidden = false
+    panel.style.display = 'flex'
     hideLeftPanelContent()
+    callbacks.onActivate()
   }
 
   const hideWhiteboard = () => {
     active = false
-    setNativeTabSelected(tabButton!, false)
-    tabButton!.setAttribute('aria-selected', 'false')
-    panel!.hidden = true
+    setNativeTabSelected(tabButton, false)
+    tabButton.setAttribute('aria-selected', 'false')
+    panel.hidden = true
+    panel.style.display = 'none'
     showLeftPanelContent()
   }
 
   if (!tabButton.dataset.lcWhiteboardBound) {
     tabButton.dataset.lcWhiteboardBound = 'true'
-    tabButton.addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      showWhiteboard()
-    })
+    bindTabActivation(tabButton, showWhiteboard)
   }
 
   const detachNativeListeners = attachNativeTabListeners(tabset, hideWhiteboard)
@@ -177,55 +226,73 @@ export function mountLeetCodeWhiteboardUi(): LeetCodeMountHandles | null {
     isWhiteboardActive: () => active,
     destroy: () => {
       detachNativeListeners()
-      tabButton?.remove()
-      panel?.remove()
+      tabButton.remove()
+      panel.remove()
     },
   }
 }
 
-export function waitForLeetCodeLayout(
-  onReady: (handles: LeetCodeMountHandles) => void,
-): () => void {
+export function waitForLeetCodeLayout(callbacks: LeetCodeLayoutCallbacks): () => void {
   let handles: LeetCodeMountHandles | null = null
   let lastUrl = location.href
 
+  const destroyHandles = () => {
+    handles?.destroy()
+    handles = null
+    callbacks.onTeardown()
+  }
+
   const tryMount = () => {
     if (!location.pathname.includes('/problems/')) {
-      handles?.destroy()
-      handles = null
+      destroyHandles()
       return
     }
 
-    const next = mountLeetCodeWhiteboardUi()
-    if (!next) return
+    if (isMountedInDom() && handles) return
 
-    if (handles && handles !== next) {
-      handles.destroy()
+    if (handles) {
+      destroyHandles()
     }
 
+    const next = mountLeetCodeWhiteboardUi({ onActivate: callbacks.onActivate })
+    if (!next) return
+
     handles = next
-    onReady(handles)
+    callbacks.onReady()
+  }
+
+  let debounceTimer: number | null = null
+  const scheduleTryMount = () => {
+    if (debounceTimer) window.clearTimeout(debounceTimer)
+    debounceTimer = window.setTimeout(tryMount, 100)
   }
 
   const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href
-      handles?.destroy()
-      handles = null
+      destroyHandles()
     }
-    tryMount()
+    scheduleTryMount()
   })
+
+  const onResize = () => {
+    const panel = document.getElementById(PANEL_ID)
+    const tabset = getLeftPanelTabset()
+    if (panel && tabset) syncPanelGeometry(panel, tabset)
+  }
 
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
   })
+  window.addEventListener('resize', onResize)
 
   tryMount()
 
   return () => {
+    if (debounceTimer) window.clearTimeout(debounceTimer)
     observer.disconnect()
-    handles?.destroy()
-    handles = null
+    window.removeEventListener('resize', onResize)
+    destroyHandles()
   }
 }

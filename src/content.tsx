@@ -7,12 +7,22 @@ import './styles.css'
 import './embedded.css'
 
 let reactRoot: Root | null = null
+let mountedContainer: HTMLElement | null = null
 
 function mountReactApp() {
   const container = getWhiteboardRoot()
-  if (!container || reactRoot) return
+  if (!container) return
+
+  if (reactRoot && mountedContainer === container) return
+
+  if (reactRoot) {
+    reactRoot.unmount()
+    reactRoot = null
+    mountedContainer = null
+  }
 
   reactRoot = createRoot(container)
+  mountedContainer = container
   reactRoot.render(
     <StrictMode>
       <App mode={getAppMode()} />
@@ -23,10 +33,13 @@ function mountReactApp() {
 function teardownReactApp() {
   reactRoot?.unmount()
   reactRoot = null
+  mountedContainer = null
 }
 
-const stopWaiting = waitForLeetCodeLayout(() => {
-  mountReactApp()
+const stopWaiting = waitForLeetCodeLayout({
+  onReady: mountReactApp,
+  onActivate: mountReactApp,
+  onTeardown: teardownReactApp,
 })
 
 window.addEventListener('pagehide', () => {

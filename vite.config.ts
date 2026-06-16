@@ -35,19 +35,11 @@ export default defineConfig(({ mode }) => {
         input: {
           main: resolve(__dirname, 'index.html'),
           sidepanel: resolve(__dirname, 'sidepanel.html'),
-          content: resolve(__dirname, 'src/content.tsx'),
         },
         output: {
-          entryFileNames: (chunkInfo) => {
-            if (chunkInfo.name === 'content') return 'content.js'
-            return 'assets/[name]-[hash].js'
-          },
+          entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
-          assetFileNames: (assetInfo) => {
-            const name = assetInfo.name ?? ''
-            if (name.includes('content') && name.endsWith('.css')) return 'content.css'
-            return 'assets/[name]-[hash][extname]'
-          },
+          assetFileNames: 'assets/[name]-[hash][extname]',
         },
       },
     },
