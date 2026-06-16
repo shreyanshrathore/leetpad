@@ -4,25 +4,57 @@ import { useAuth } from './hooks/useAuth'
 import { useProblemSlug } from './hooks/useProblemSlug'
 import { useRealtimeBoard } from './hooks/useRealtimeBoard'
 
-function SaveStatusText({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    idle: 'Ready',
-    saving: 'Saving...',
-    saved: 'Saved',
-    error: 'Save failed',
+function StatusText({
+  saveStatus,
+  previewStatus,
+  isDrawing,
+}: {
+  saveStatus: string
+  previewStatus: string
+  isDrawing: boolean
+}) {
+  if (isDrawing) {
+    return <span className="save-status save-status--saving">Drawing...</span>
   }
 
-  return <span className={`save-status save-status--${status}`}>{labels[status] ?? status}</span>
+  if (previewStatus === 'syncing') {
+    return <span className="save-status save-status--saving">Syncing preview...</span>
+  }
+
+  if (saveStatus === 'saving') {
+    return <span className="save-status save-status--saving">Saving...</span>
+  }
+
+  if (saveStatus === 'saved') {
+    return <span className="save-status save-status--saved">Saved</span>
+  }
+
+  if (previewStatus === 'synced') {
+    return <span className="save-status save-status--saved">Preview synced</span>
+  }
+
+  if (saveStatus === 'error') {
+    return <span className="save-status save-status--error">Save failed</span>
+  }
+
+  return <span className="save-status">Ready</span>
 }
 
 function AppContent() {
   const { user, logout } = useAuth()
   const { slug, loading, needsManualInput, manualSlug, setManualSlug, commitManualSlug } =
     useProblemSlug()
-  const { snapshot, ready, saveStatus, error, queueSave } = useRealtimeBoard(
-    user?.uid ?? null,
-    slug,
-  )
+  const {
+    initialSnapshot,
+    remoteSnapshot,
+    ready,
+    saveStatus,
+    previewStatus,
+    error,
+    isDrawing,
+    onLocalChange,
+    saveBoard,
+  } = useRealtimeBoard(user?.uid ?? null, slug)
 
   if (loading) {
     return <div className="centered-message">Detecting LeetCode problem...</div>
@@ -70,7 +102,14 @@ function AppContent() {
           <h1>{slug}</h1>
         </div>
         <div className="header-actions">
-          <SaveStatusText status={saveStatus} />
+          <StatusText
+            saveStatus={saveStatus}
+            previewStatus={previewStatus}
+            isDrawing={isDrawing}
+          />
+          <button type="button" onClick={() => void saveBoard()}>
+            Save
+          </button>
           <button type="button" className="secondary-button" onClick={() => void logout()}>
             Sign out
           </button>
@@ -82,7 +121,13 @@ function AppContent() {
       {!ready ? (
         <div className="centered-message">Loading whiteboard...</div>
       ) : (
-        <Whiteboard snapshot={snapshot} ready={ready} onChange={queueSave} />
+        <Whiteboard
+          initialSnapshot={initialSnapshot}
+          remoteSnapshot={remoteSnapshot}
+          ready={ready}
+          isDrawing={isDrawing}
+          onChange={onLocalChange}
+        />
       )}
     </div>
   )

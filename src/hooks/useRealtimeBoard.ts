@@ -10,60 +10,72 @@ import type { TLEditorSnapshot } from 'tldraw'
 import { db } from '../firebase'
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+export type PreviewStatus = 'idle' | 'syncing' | 'synced'
 
 interface BoardDocument {
   boardData: TLEditorSnapshot | null
   updatedAt: Timestamp | null
 }
 
-function getBoardRef(userId: string, problemSlug: string) {
+const PREVIEW_IDLE_MS = 1000
+const PREVIEW_MIN_INTERVAL_MS = 1500
+
+function getSavedBoardRef(userId: string, problemSlug: string) {
   return doc(db, 'users', userId, 'boards', problemSlug)
 }
 
+function getPreviewRef(userId: string, problemSlug: string) {
+  return doc(db, 'users', userId, 'previews', problemSlug)
+}
+
 /**
- * Realtime Firestore sync for a single problem whiteboard.
+ * Preview sync while drawing + manual save to the persisted board.
  */
 export function useRealtimeBoard(userId: string | null, problemSlug: string | null) {
-  const [snapshot, setSnapshot] = useState<TLEditorSnapshot | null>(null)
+  const [initialSnapshot, setInitialSnapshot] = useState<TLEditorSnapshot | null>(null)
+  const [remoteSnapshot, setRemoteSnapshot] = useState<TLEditorSnapshot | null>(null)
   const [ready, setReady] = useState(false)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [isDrawing, setIsDrawing] = useState(false)
 
-  const isRemoteUpdate = useRef(false)
-  // When Firestore emits, React applies the snapshot in an effect *after* this
-  // callback. Keep the remote lock a bit longer to avoid clobbering local edits.
-  const saveTimeoutRef = useRef<number | null>(null)
-  const latestSnapshotRef = useRef<TLEditorSnapshot | null>(null)
+  const latestLocalRef = useRef<TLEditorSnapshot | null>(null)
+  const isDrawingRef = useRef(false)
+  const idleTimerRef = useRef<number | null>(null)
+  const pendingPreviewRef = useRef<TLEditorSnapshot | null>(null)
+  const previewThrottleTimerRef = useRef<number | null>(null)
+  const lastPreviewWriteRef = useRef(0)
+  const initialLoadedRef = useRef(false)
 
-  // Listen for remote changes from other devices.
+  // Load the saved board once when opening a problem.
   useEffect(() => {
     if (!userId || !problemSlug) {
-      setSnapshot(null)
+      setInitialSnapshot(null)
+      setRemoteSnapshot(null)
       setReady(false)
+      initialLoadedRef.current = false
       return
     }
 
     setReady(false)
     setError(null)
-
-    const boardRef = getBoardRef(userId, problemSlug)
+    initialLoadedRef.current = false
 
     const unsubscribe = onSnapshot(
-      boardRef,
+      getSavedBoardRef(userId, problemSlug),
       (docSnap) => {
         const data = docSnap.data() as BoardDocument | undefined
-        const remoteSnapshot = data?.boardData ?? null
+        const saved = data?.boardData ?? null
 
-        isRemoteUpdate.current = true
-        setSnapshot(remoteSnapshot)
-        latestSnapshotRef.current = remoteSnapshot
-        setReady(true)
-        setSaveStatus('saved')
-
-        // Reset after React has a chance to apply `loadSnapshot` on the canvas.
-        window.setTimeout(() => {
-          isRemoteUpdate.current = false
-        }, 250)
+        if (!initialLoadedRef.current) {
+          initialLoadedRef.current = true
+          setInitialSnapshot(saved)
+          setRemoteSnapshot(saved)
+          latestLocalRef.current = saved
+          setReady(true)
+          setSaveStatus(saved ? 'saved' : 'idle')
+        }
       },
       (err) => {
         setError(err.message)
@@ -71,69 +83,147 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
       },
     )
 
+    return () => {
+      unsubscribe()
+      initialLoadedRef.current = false
+    }
+  }, [userId, problemSlug])
+
+  // Listen for live preview updates from the other device.
+  useEffect(() => {
+    if (!userId || !problemSlug) return
+
+    const unsubscribe = onSnapshot(
+      getPreviewRef(userId, problemSlug),
+      (docSnap) => {
+        const data = docSnap.data() as BoardDocument | undefined
+        const preview = data?.boardData ?? null
+        if (!preview) return
+
+        // Do not overwrite local strokes while the user is actively drawing.
+        if (isDrawingRef.current) return
+
+        setRemoteSnapshot(preview)
+        setPreviewStatus('synced')
+      },
+      (err) => {
+        setError(err.message)
+      },
+    )
+
     return unsubscribe
   }, [userId, problemSlug])
 
-  const saveSnapshot = useCallback(
-    async (nextSnapshot: TLEditorSnapshot) => {
+  const flushPreview = useCallback(
+    async (snapshot: TLEditorSnapshot) => {
       if (!userId || !problemSlug) return
 
-      setSaveStatus('saving')
+      const now = Date.now()
+      const elapsed = now - lastPreviewWriteRef.current
+
+      if (elapsed < PREVIEW_MIN_INTERVAL_MS) {
+        pendingPreviewRef.current = snapshot
+        if (previewThrottleTimerRef.current) {
+          window.clearTimeout(previewThrottleTimerRef.current)
+        }
+        previewThrottleTimerRef.current = window.setTimeout(() => {
+          const pending = pendingPreviewRef.current
+          if (pending) {
+            pendingPreviewRef.current = null
+            void flushPreview(pending)
+          }
+        }, PREVIEW_MIN_INTERVAL_MS - elapsed)
+        return
+      }
+
+      lastPreviewWriteRef.current = now
+      setPreviewStatus('syncing')
 
       try {
         await setDoc(
-          getBoardRef(userId, problemSlug),
+          getPreviewRef(userId, problemSlug),
           {
-            boardData: nextSnapshot,
+            boardData: snapshot,
             updatedAt: serverTimestamp(),
           },
           { merge: true },
         )
-        setSaveStatus('saved')
+        setPreviewStatus('synced')
         setError(null)
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : 'Failed to save whiteboard'
+          err instanceof Error ? err.message : 'Failed to sync preview'
         setError(message)
-        setSaveStatus('error')
       }
     },
     [userId, problemSlug],
   )
 
-  const queueSave = useCallback(
+  const onLocalChange = useCallback(
     (nextSnapshot: TLEditorSnapshot) => {
-      if (isRemoteUpdate.current) return
+      latestLocalRef.current = nextSnapshot
+      isDrawingRef.current = true
+      setIsDrawing(true)
 
-      latestSnapshotRef.current = nextSnapshot
-
-      if (saveTimeoutRef.current) {
-        window.clearTimeout(saveTimeoutRef.current)
+      if (idleTimerRef.current) {
+        window.clearTimeout(idleTimerRef.current)
       }
 
-      // Debounce writes to keep Firestore usage low.
-      saveTimeoutRef.current = window.setTimeout(() => {
-        if (latestSnapshotRef.current) {
-          void saveSnapshot(latestSnapshotRef.current)
-        }
-      }, 500)
+      // After the user pauses, push a lightweight preview update.
+      idleTimerRef.current = window.setTimeout(() => {
+        isDrawingRef.current = false
+        setIsDrawing(false)
+        void flushPreview(nextSnapshot)
+      }, PREVIEW_IDLE_MS)
     },
-    [saveSnapshot],
+    [flushPreview],
   )
+
+  const saveBoard = useCallback(async () => {
+    if (!userId || !problemSlug) return
+
+    const snapshot = latestLocalRef.current
+    if (!snapshot) return
+
+    setSaveStatus('saving')
+
+    try {
+      await setDoc(
+        getSavedBoardRef(userId, problemSlug),
+        {
+          boardData: snapshot,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
+      setSaveStatus('saved')
+      setError(null)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to save whiteboard'
+      setError(message)
+      setSaveStatus('error')
+    }
+  }, [userId, problemSlug])
 
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        window.clearTimeout(saveTimeoutRef.current)
+      if (idleTimerRef.current) window.clearTimeout(idleTimerRef.current)
+      if (previewThrottleTimerRef.current) {
+        window.clearTimeout(previewThrottleTimerRef.current)
       }
     }
   }, [])
 
   return {
-    snapshot,
+    initialSnapshot,
+    remoteSnapshot,
     ready,
     saveStatus,
+    previewStatus,
     error,
-    queueSave,
+    isDrawing,
+    onLocalChange,
+    saveBoard,
   }
 }

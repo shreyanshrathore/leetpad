@@ -84,6 +84,9 @@ service cloud.firestore {
     match /users/{userId}/boards/{problemSlug} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    match /users/{userId}/previews/{problemSlug} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }
 ```
@@ -204,17 +207,17 @@ Hosted iPad URL format:
 https://your-deployed-app.web.app/?problem=two-sum
 ```
 
-## 5. Realtime sync
+## 5. Sync model (preview + save)
 
 Flow:
 
-1. User draws on one device
-2. tldraw emits a document snapshot
-3. App debounces and writes to Firestore
-4. Other device listens with `onSnapshot`
-5. Remote snapshot is loaded into tldraw
+1. **Saved board** (`users/{userId}/boards/{problemSlug}`) loads when you open a problem
+2. While drawing, changes stay local (no Firestore overwrite)
+3. After you pause ~1 second, a **preview** syncs to `users/{userId}/previews/{problemSlug}`
+4. The other device shows preview updates only when it is not actively drawing
+5. Click **Save** to persist the final board to Firestore
 
-This gives simple multi-device sync without WebRTC or a custom socket server.
+This keeps drawing smooth and reduces Firestore writes compared to full realtime snapshot sync.
 
 ## 6. Deployment
 
