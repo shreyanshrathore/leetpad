@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AuthGate } from './components/AuthGate'
 import { ProblemSidebar } from './components/ProblemSidebar'
 import { Whiteboard, type WhiteboardHandle } from './components/Whiteboard'
@@ -24,6 +24,47 @@ function StatusText({ saveStatus }: { readonly saveStatus: string }) {
   }
 
   return <span className="save-status">Unsaved changes</span>
+}
+
+const SIDEBAR_COLLAPSED_KEY = 'lc-whiteboard-sidebar-collapsed'
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed))
+  } catch {
+    // Ignore storage errors (private browsing, etc.)
+  }
+}
+
+function SidebarReopenButton({ onClick }: { readonly onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="sidebar-reopen-btn"
+      onClick={onClick}
+      aria-label="Show problem list"
+      title="Show problems"
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M6 3l5 5-5 5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  )
 }
 
 function HostedWelcome() {
@@ -104,6 +145,20 @@ function HostedAppContent() {
     user?.uid ?? null,
   )
   const autoSelectedRef = useRef(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      writeSidebarCollapsed(next)
+      return next
+    })
+  }, [])
+
+  const expandSidebar = useCallback(() => {
+    setSidebarCollapsed(false)
+    writeSidebarCollapsed(false)
+  }, [])
 
   useEffect(() => {
     if (loading || boardsLoading || slug || autoSelectedRef.current) return
@@ -118,17 +173,22 @@ function HostedAppContent() {
   }
 
   return (
-    <div className="hosted-layout">
+    <div
+      className={`hosted-layout${sidebarCollapsed ? ' hosted-layout--sidebar-collapsed' : ''}`}
+    >
       <ProblemSidebar
         boards={boards}
         boardsLoading={boardsLoading}
         boardsError={boardsError}
         activeSlug={slug}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
         onSelectProblem={navigateToProblem}
         onOpenNewProblem={navigateToProblem}
       />
 
       <main className="hosted-main">
+        {sidebarCollapsed ? <SidebarReopenButton onClick={expandSidebar} /> : null}
         {slug && user ? (
           <WhiteboardPanel slug={slug} userId={user.uid} logout={logout} />
         ) : (

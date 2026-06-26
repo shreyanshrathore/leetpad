@@ -7,6 +7,8 @@ interface ProblemSidebarProps {
   boardsLoading: boolean
   boardsError: string | null
   activeSlug: string | null
+  collapsed: boolean
+  onToggleCollapse: () => void
   onSelectProblem: (slug: string) => void
   onOpenNewProblem: (slug: string) => void
 }
@@ -36,6 +38,8 @@ export function ProblemSidebar({
   boardsLoading,
   boardsError,
   activeSlug,
+  collapsed,
+  onToggleCollapse,
   onSelectProblem,
   onOpenNewProblem,
 }: ProblemSidebarProps) {
@@ -60,13 +64,37 @@ export function ProblemSidebar({
   }
 
   return (
-    <aside className="problem-sidebar" aria-label="Saved problems">
+    <aside
+      className={`problem-sidebar${collapsed ? ' problem-sidebar--collapsed' : ''}`}
+      aria-label="Saved problems"
+      aria-hidden={collapsed}
+    >
       <div className="problem-sidebar__header">
         <div>
           <p className="problem-sidebar__eyebrow">Your boards</p>
           <h2 className="problem-sidebar__title">Problems</h2>
         </div>
-        <span className="problem-sidebar__count">{boards.length}</span>
+        <div className="problem-sidebar__header-actions">
+          <span className="problem-sidebar__count">{boards.length}</span>
+          <button
+            type="button"
+            className="sidebar-toggle-btn"
+            onClick={onToggleCollapse}
+            aria-label="Hide problem list"
+            title="Hide problems"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M10 3L5 8l5 5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="problem-sidebar__search">
