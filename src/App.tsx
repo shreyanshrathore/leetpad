@@ -186,6 +186,7 @@ function HostedAppContent() {
   const cancelDeleteBoard = useCallback(() => {
     if (deleting) return
     setPendingDeleteSlug(null)
+    setDeleteError(null)
   }, [deleting])
 
   const confirmDeleteBoard = useCallback(async () => {
@@ -238,6 +239,7 @@ function HostedAppContent() {
         }
         confirmLabel="Delete board"
         loading={deleting}
+        error={deleteError}
         onConfirm={() => void confirmDeleteBoard()}
         onCancel={cancelDeleteBoard}
       />
@@ -258,7 +260,6 @@ function HostedAppContent() {
         />
 
         <main className="hosted-main">
-          {deleteError ? <p className="error-banner">{deleteError}</p> : null}
           {chromeCollapsed ? <SidebarReopenButton onClick={expandChrome} /> : null}
           {slug && user ? (
             <WhiteboardPanel

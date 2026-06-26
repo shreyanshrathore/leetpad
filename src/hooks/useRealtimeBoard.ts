@@ -55,19 +55,21 @@ export function useRealtimeBoard(userId: string | null, problemSlug: string | nu
   }, [])
 
   useEffect(() => {
-    if (!userId || !problemSlug) {
-      setInitialSnapshot(null)
-      setIncomingSnapshot(null)
-      setReady(false)
-      initialLoadedRef.current = false
-      lastLoadedKeyRef.current = null
-      return
-    }
-
-    setReady(true)
+    // Always start from a clean slate so the previous board's drawing never
+    // bleeds into the next one when navigating or after a delete.
+    setInitialSnapshot(null)
+    setIncomingSnapshot(null)
+    setReady(false)
+    setSaveStatus('idle')
     setError(null)
     initialLoadedRef.current = false
     lastLoadedKeyRef.current = null
+    latestLocalRef.current = null
+    isEditingRef.current = false
+
+    if (!userId || !problemSlug) {
+      return
+    }
 
     const unsubscribe = onSnapshot(
       getSavedBoardRef(userId, problemSlug),

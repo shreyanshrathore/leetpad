@@ -4,6 +4,7 @@ interface ConfirmDialogProps {
   readonly message: string
   readonly confirmLabel?: string
   readonly loading?: boolean
+  readonly error?: string | null
   readonly onConfirm: () => void
   readonly onCancel: () => void
 }
@@ -14,6 +15,7 @@ export function ConfirmDialog({
   message,
   confirmLabel = 'Delete',
   loading = false,
+  error = null,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -35,6 +37,11 @@ export function ConfirmDialog({
         <p id="confirm-dialog-message" className="confirm-dialog__message">
           {message}
         </p>
+        {error ? (
+          <p className="confirm-dialog__error" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="confirm-dialog__actions">
           <button
             type="button"

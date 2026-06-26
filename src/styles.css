@@ -202,6 +202,17 @@ button:hover {
   color: #4b5563;
 }
 
+.confirm-dialog__error {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
 .confirm-dialog__actions {
   display: flex;
   justify-content: flex-end;
