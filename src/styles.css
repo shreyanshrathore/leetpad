@@ -156,6 +156,59 @@ button:hover {
   background: #d1d5db;
 }
 
+.danger-button {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+}
+
+.danger-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.confirm-dialog {
+  width: min(100%, 24rem);
+  padding: 1.25rem;
+  border-radius: 0.875rem;
+  background: #ffffff;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+}
+
+.confirm-dialog__title {
+  margin: 0;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.confirm-dialog__message {
+  margin: 0.75rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
 input {
   width: min(100%, 20rem);
   padding: 0.625rem 0.75rem;
@@ -381,9 +434,27 @@ input {
   color: #dc2626;
 }
 
-.problem-sidebar__item {
-  width: 100%;
+.problem-sidebar__item-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
   border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+.problem-sidebar__item-row:hover {
+  background: #f9fafb;
+}
+
+.problem-sidebar__item-row--active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.problem-sidebar__item {
+  flex: 1;
+  min-width: 0;
+  border: none;
   border-radius: 0.75rem;
   padding: 0.75rem;
   background: transparent;
@@ -393,12 +464,28 @@ input {
 }
 
 .problem-sidebar__item:hover {
-  background: #f9fafb;
+  background: transparent;
 }
 
-.problem-sidebar__item--active {
-  background: #eff6ff;
-  border-color: #bfdbfe;
+.problem-sidebar__delete-btn {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin-right: 0.35rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.problem-sidebar__delete-btn:hover {
+  background: #fef2f2;
+  color: #dc2626;
 }
 
 .problem-sidebar__item-title {
@@ -533,6 +620,28 @@ input {
     background: #4b5563;
   }
 
+  .danger-button {
+    background: #dc2626;
+    color: #ffffff;
+  }
+
+  .danger-button:hover {
+    background: #b91c1c;
+  }
+
+  .confirm-dialog {
+    background: #282828;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  .confirm-dialog__title {
+    color: #eff1f6;
+  }
+
+  .confirm-dialog__message {
+    color: #d1d5db;
+  }
+
   input {
     background: #1a1a1a;
     color: #eff1f6;
@@ -572,12 +681,21 @@ input {
   }
 
   .problem-sidebar__item:hover {
+    background: transparent;
+  }
+
+  .problem-sidebar__item-row:hover {
     background: #1f1f1f;
   }
 
-  .problem-sidebar__item--active {
+  .problem-sidebar__item-row--active {
     background: #1e3a5f;
     border-color: #2563eb;
+  }
+
+  .problem-sidebar__delete-btn:hover {
+    background: #450a0a;
+    color: #fca5a5;
   }
 
   .problem-sidebar__footer {

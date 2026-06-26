@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   extractProblemSlug,
   extractProblemSlugFromQuery,
+  normalizeProblemSlug,
 } from '../lib/problemSlug'
 import {
   isContentScriptContext,
@@ -38,20 +39,35 @@ export function useProblemSlug() {
   const [manualSlug, setManualSlug] = useState('')
 
   const navigateToProblem = useCallback((nextSlug: string) => {
-    const trimmed = nextSlug.trim()
-    if (!trimmed) return
+    const normalized = normalizeProblemSlug(nextSlug)
+    if (!normalized) return
 
     if (isHostedWebApp()) {
       const url = new URL(window.location.href)
-      url.searchParams.set('problem', trimmed)
+      url.searchParams.set('problem', normalized)
       window.history.pushState({}, '', url.toString())
-      setSlug(trimmed)
+      setSlug(normalized)
       return
     }
 
-    setSlug(trimmed)
+    setSlug(normalized)
     const url = new URL(window.location.href)
-    url.searchParams.set('problem', trimmed)
+    url.searchParams.set('problem', normalized)
+    window.history.replaceState({}, '', url.toString())
+  }, [])
+
+  const clearProblem = useCallback(() => {
+    if (isHostedWebApp()) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('problem')
+      window.history.pushState({}, '', url.toString())
+      setSlug(null)
+      return
+    }
+
+    setSlug(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('problem')
     window.history.replaceState({}, '', url.toString())
   }, [])
 
@@ -64,6 +80,14 @@ export function useProblemSlug() {
       const querySlug = readHostedSlug()
       if (querySlug) {
         if (!cancelled) {
+          if (isHostedWebApp()) {
+            const raw = new URLSearchParams(window.location.search).get('problem')
+            if (raw && raw !== querySlug) {
+              const url = new URL(window.location.href)
+              url.searchParams.set('problem', querySlug)
+              window.history.replaceState({}, '', url.toString())
+            }
+          }
           setSlug(querySlug)
           setLoading(false)
         }
@@ -154,5 +178,6 @@ export function useProblemSlug() {
     setManualSlug,
     commitManualSlug,
     navigateToProblem,
+    clearProblem,
   }
 }

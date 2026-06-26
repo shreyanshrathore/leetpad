@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AuthGate } from './components/AuthGate'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import { ProblemSidebar } from './components/ProblemSidebar'
 import { Whiteboard, type WhiteboardHandle } from './components/Whiteboard'
 import { useAuth } from './hooks/useAuth'
@@ -7,6 +8,7 @@ import { useProblemSlug } from './hooks/useProblemSlug'
 import { useRealtimeBoard } from './hooks/useRealtimeBoard'
 import { useSavedBoards } from './hooks/useSavedBoards'
 import { formatProblemTitle } from './lib/problemTitle'
+import { deleteBoard } from './lib/deleteBoard'
 import type { AppMode } from './lib/runtimeContext'
 import { isHostedWebApp } from './lib/runtimeContext'
 
@@ -84,11 +86,13 @@ function WhiteboardPanel({
   userId,
   logout,
   chromeCollapsed,
+  onRequestDelete,
 }: {
   readonly slug: string
   readonly userId: string
   readonly logout: () => Promise<void>
   readonly chromeCollapsed: boolean
+  readonly onRequestDelete: () => void
 }) {
   const {
     initialSnapshot,
@@ -124,6 +128,9 @@ function WhiteboardPanel({
               <button type="button" onClick={() => void saveBoard()}>
                 Save
               </button>
+              <button type="button" className="danger-button" onClick={onRequestDelete}>
+                Delete
+              </button>
               <button type="button" className="secondary-button" onClick={() => void logout()}>
                 Sign out
               </button>
@@ -148,12 +155,15 @@ function WhiteboardPanel({
 
 function HostedAppContent() {
   const { user, logout } = useAuth()
-  const { slug, loading, navigateToProblem } = useProblemSlug()
+  const { slug, loading, navigateToProblem, clearProblem } = useProblemSlug()
   const { boards, loading: boardsLoading, error: boardsError } = useSavedBoards(
     user?.uid ?? null,
   )
   const autoSelectedRef = useRef(false)
   const [chromeCollapsed, setChromeCollapsed] = useState(readSidebarCollapsed)
+  const [pendingDeleteSlug, setPendingDeleteSlug] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const toggleChrome = useCallback(() => {
     setChromeCollapsed((prev) => {
@@ -168,6 +178,42 @@ function HostedAppContent() {
     writeSidebarCollapsed(false)
   }, [])
 
+  const requestDeleteBoard = useCallback((boardSlug: string) => {
+    setDeleteError(null)
+    setPendingDeleteSlug(boardSlug)
+  }, [])
+
+  const cancelDeleteBoard = useCallback(() => {
+    if (deleting) return
+    setPendingDeleteSlug(null)
+  }, [deleting])
+
+  const confirmDeleteBoard = useCallback(async () => {
+    if (!user || !pendingDeleteSlug) return
+
+    setDeleting(true)
+    setDeleteError(null)
+
+    try {
+      await deleteBoard(user.uid, pendingDeleteSlug)
+
+      if (slug === pendingDeleteSlug) {
+        const remaining = boards.filter((board) => board.slug !== pendingDeleteSlug)
+        if (remaining.length > 0) {
+          navigateToProblem(remaining[0].slug)
+        } else {
+          clearProblem()
+        }
+      }
+
+      setPendingDeleteSlug(null)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete board')
+    } finally {
+      setDeleting(false)
+    }
+  }, [boards, clearProblem, navigateToProblem, pendingDeleteSlug, slug, user])
+
   useEffect(() => {
     if (loading || boardsLoading || slug || autoSelectedRef.current) return
     if (boards.length === 0) return
@@ -181,34 +227,53 @@ function HostedAppContent() {
   }
 
   return (
-    <div
-      className={`hosted-layout${chromeCollapsed ? ' hosted-layout--chrome-collapsed' : ''}`}
-    >
-      <ProblemSidebar
-        boards={boards}
-        boardsLoading={boardsLoading}
-        boardsError={boardsError}
-        activeSlug={slug}
-        collapsed={chromeCollapsed}
-        onToggleCollapse={toggleChrome}
-        onSelectProblem={navigateToProblem}
-        onOpenNewProblem={navigateToProblem}
+    <>
+      <ConfirmDialog
+        open={pendingDeleteSlug !== null}
+        title="Delete whiteboard?"
+        message={
+          pendingDeleteSlug
+            ? `This will permanently delete your saved board for "${formatProblemTitle(pendingDeleteSlug)}". This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete board"
+        loading={deleting}
+        onConfirm={() => void confirmDeleteBoard()}
+        onCancel={cancelDeleteBoard}
       />
 
-      <main className="hosted-main">
-        {chromeCollapsed ? <SidebarReopenButton onClick={expandChrome} /> : null}
-        {slug && user ? (
-          <WhiteboardPanel
-            slug={slug}
-            userId={user.uid}
-            logout={logout}
-            chromeCollapsed={chromeCollapsed}
-          />
-        ) : (
-          <HostedWelcome />
-        )}
-      </main>
-    </div>
+      <div
+        className={`hosted-layout${chromeCollapsed ? ' hosted-layout--chrome-collapsed' : ''}`}
+      >
+        <ProblemSidebar
+          boards={boards}
+          boardsLoading={boardsLoading}
+          boardsError={boardsError}
+          activeSlug={slug}
+          collapsed={chromeCollapsed}
+          onToggleCollapse={toggleChrome}
+          onSelectProblem={navigateToProblem}
+          onOpenNewProblem={navigateToProblem}
+          onRequestDelete={requestDeleteBoard}
+        />
+
+        <main className="hosted-main">
+          {deleteError ? <p className="error-banner">{deleteError}</p> : null}
+          {chromeCollapsed ? <SidebarReopenButton onClick={expandChrome} /> : null}
+          {slug && user ? (
+            <WhiteboardPanel
+              slug={slug}
+              userId={user.uid}
+              logout={logout}
+              chromeCollapsed={chromeCollapsed}
+              onRequestDelete={() => requestDeleteBoard(slug)}
+            />
+          ) : (
+            <HostedWelcome />
+          )}
+        </main>
+      </div>
+    </>
   )
 }
 

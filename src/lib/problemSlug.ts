@@ -6,10 +6,23 @@ export function extractProblemSlug(url: string): string | null {
   try {
     const parsed = new URL(url)
     const match = parsed.pathname.match(/\/problems\/([^/]+)/)
-    return match?.[1] ?? null
+    const raw = match?.[1]
+    return raw ? normalizeProblemSlug(raw) : null
   } catch {
     return null
   }
+}
+
+/**
+ * Normalize user input into a LeetCode problem slug (lowercase, hyphenated).
+ * Example: "Two Sum" / "TWO-SUM" -> "two-sum"
+ */
+export function normalizeProblemSlug(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/_/g, '-')
 }
 
 /**
@@ -18,6 +31,7 @@ export function extractProblemSlug(url: string): string | null {
  */
 export function extractProblemSlugFromQuery(): string | null {
   const params = new URLSearchParams(window.location.search)
-  const problem = params.get('problem')?.trim()
-  return problem || null
+  const problem = params.get('problem')
+  if (!problem?.trim()) return null
+  return normalizeProblemSlug(problem)
 }

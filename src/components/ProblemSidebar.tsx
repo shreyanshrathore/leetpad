@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { SavedBoardSummary } from '../hooks/useSavedBoards'
 import { formatProblemTitle, getLeetCodeProblemUrl } from '../lib/problemTitle'
+import { normalizeProblemSlug } from '../lib/problemSlug'
 
 interface ProblemSidebarProps {
   boards: SavedBoardSummary[]
@@ -11,6 +12,7 @@ interface ProblemSidebarProps {
   onToggleCollapse: () => void
   onSelectProblem: (slug: string) => void
   onOpenNewProblem: (slug: string) => void
+  onRequestDelete: (slug: string) => void
 }
 
 function formatRelativeTime(date: Date | null): string {
@@ -33,6 +35,21 @@ function formatRelativeTime(date: Date | null): string {
   })
 }
 
+function DeleteIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M3 4.5h10M6 4.5V3.5h4v1M5 4.5l.5 8h5l.5-8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function ProblemSidebar({
   boards,
   boardsLoading,
@@ -42,6 +59,7 @@ export function ProblemSidebar({
   onToggleCollapse,
   onSelectProblem,
   onOpenNewProblem,
+  onRequestDelete,
 }: ProblemSidebarProps) {
   const [query, setQuery] = useState('')
   const [newSlug, setNewSlug] = useState('')
@@ -57,9 +75,9 @@ export function ProblemSidebar({
   }, [boards, query])
 
   function handleOpenNewProblem() {
-    const trimmed = newSlug.trim()
-    if (!trimmed) return
-    onOpenNewProblem(trimmed)
+    const normalized = normalizeProblemSlug(newSlug)
+    if (!normalized) return
+    onOpenNewProblem(normalized)
     setNewSlug('')
   }
 
@@ -124,23 +142,39 @@ export function ProblemSidebar({
           filteredBoards.map((board) => {
             const isActive = board.slug === activeSlug
             return (
-              <button
+              <div
                 key={board.slug}
-                type="button"
                 role="listitem"
-                className={`problem-sidebar__item${isActive ? ' problem-sidebar__item--active' : ''}`}
-                onClick={() => onSelectProblem(board.slug)}
+                className={`problem-sidebar__item-row${isActive ? ' problem-sidebar__item-row--active' : ''}`}
               >
-                <span className="problem-sidebar__item-title">
-                  {formatProblemTitle(board.slug)}
-                </span>
-                <span className="problem-sidebar__item-meta">
-                  <span className="problem-sidebar__item-slug">{board.slug}</span>
-                  <span className="problem-sidebar__item-time">
-                    {formatRelativeTime(board.updatedAt)}
+                <button
+                  type="button"
+                  className="problem-sidebar__item"
+                  onClick={() => onSelectProblem(board.slug)}
+                >
+                  <span className="problem-sidebar__item-title">
+                    {formatProblemTitle(board.slug)}
                   </span>
-                </span>
-              </button>
+                  <span className="problem-sidebar__item-meta">
+                    <span className="problem-sidebar__item-slug">{board.slug}</span>
+                    <span className="problem-sidebar__item-time">
+                      {formatRelativeTime(board.updatedAt)}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="problem-sidebar__delete-btn"
+                  aria-label={`Delete ${formatProblemTitle(board.slug)} board`}
+                  title="Delete board"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onRequestDelete(board.slug)
+                  }}
+                >
+                  <DeleteIcon />
+                </button>
+              </div>
             )
           })
         )}
