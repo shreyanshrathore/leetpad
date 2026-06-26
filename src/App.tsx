@@ -50,8 +50,8 @@ function SidebarReopenButton({ onClick }: { readonly onClick: () => void }) {
       type="button"
       className="sidebar-reopen-btn"
       onClick={onClick}
-      aria-label="Show problem list"
-      title="Show problems"
+      aria-label="Show sidebar and toolbar"
+      title="Show sidebar and toolbar"
     >
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
         <path
@@ -83,10 +83,12 @@ function WhiteboardPanel({
   slug,
   userId,
   logout,
+  chromeCollapsed,
 }: {
   readonly slug: string
   readonly userId: string
   readonly logout: () => Promise<void>
+  readonly chromeCollapsed: boolean
 }) {
   const {
     initialSnapshot,
@@ -106,25 +108,31 @@ function WhiteboardPanel({
   }, [registerGetSnapshot])
 
   return (
-    <div className="app-shell hosted-main__shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">LeetCode problem</p>
-          <h1>{formatProblemTitle(slug)}</h1>
-          <p className="hosted-main__slug">{slug}</p>
-        </div>
-        <div className="header-actions">
-          <StatusText saveStatus={saveStatus} />
-          <button type="button" onClick={() => void saveBoard()}>
-            Save
-          </button>
-          <button type="button" className="secondary-button" onClick={() => void logout()}>
-            Sign out
-          </button>
-        </div>
-      </header>
+    <div
+      className={`app-shell hosted-main__shell${chromeCollapsed ? ' hosted-main__shell--chrome-collapsed' : ''}`}
+    >
+      {!chromeCollapsed ? (
+        <>
+          <header className="app-header">
+            <div>
+              <p className="eyebrow">LeetCode problem</p>
+              <h1>{formatProblemTitle(slug)}</h1>
+              <p className="hosted-main__slug">{slug}</p>
+            </div>
+            <div className="header-actions">
+              <StatusText saveStatus={saveStatus} />
+              <button type="button" onClick={() => void saveBoard()}>
+                Save
+              </button>
+              <button type="button" className="secondary-button" onClick={() => void logout()}>
+                Sign out
+              </button>
+            </div>
+          </header>
 
-      {error ? <p className="error-banner">{error}</p> : null}
+          {error ? <p className="error-banner">{error}</p> : null}
+        </>
+      ) : null}
 
       <Whiteboard
         key={slug}
@@ -145,18 +153,18 @@ function HostedAppContent() {
     user?.uid ?? null,
   )
   const autoSelectedRef = useRef(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  const [chromeCollapsed, setChromeCollapsed] = useState(readSidebarCollapsed)
 
-  const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((prev) => {
+  const toggleChrome = useCallback(() => {
+    setChromeCollapsed((prev) => {
       const next = !prev
       writeSidebarCollapsed(next)
       return next
     })
   }, [])
 
-  const expandSidebar = useCallback(() => {
-    setSidebarCollapsed(false)
+  const expandChrome = useCallback(() => {
+    setChromeCollapsed(false)
     writeSidebarCollapsed(false)
   }, [])
 
@@ -174,23 +182,28 @@ function HostedAppContent() {
 
   return (
     <div
-      className={`hosted-layout${sidebarCollapsed ? ' hosted-layout--sidebar-collapsed' : ''}`}
+      className={`hosted-layout${chromeCollapsed ? ' hosted-layout--chrome-collapsed' : ''}`}
     >
       <ProblemSidebar
         boards={boards}
         boardsLoading={boardsLoading}
         boardsError={boardsError}
         activeSlug={slug}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebar}
+        collapsed={chromeCollapsed}
+        onToggleCollapse={toggleChrome}
         onSelectProblem={navigateToProblem}
         onOpenNewProblem={navigateToProblem}
       />
 
       <main className="hosted-main">
-        {sidebarCollapsed ? <SidebarReopenButton onClick={expandSidebar} /> : null}
+        {chromeCollapsed ? <SidebarReopenButton onClick={expandChrome} /> : null}
         {slug && user ? (
-          <WhiteboardPanel slug={slug} userId={user.uid} logout={logout} />
+          <WhiteboardPanel
+            slug={slug}
+            userId={user.uid}
+            logout={logout}
+            chromeCollapsed={chromeCollapsed}
+          />
         ) : (
           <HostedWelcome />
         )}

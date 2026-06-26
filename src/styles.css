@@ -193,6 +193,7 @@ input {
   position: relative;
 }
 
+.hosted-layout--chrome-collapsed .problem-sidebar,
 .hosted-layout--sidebar-collapsed .problem-sidebar {
   width: 0;
   min-width: 0;
@@ -200,6 +201,10 @@ input {
   border-right-width: 0;
   opacity: 0;
   pointer-events: none;
+}
+
+.hosted-main__shell--chrome-collapsed {
+  height: 100%;
 }
 
 .sidebar-toggle-btn,
@@ -486,6 +491,7 @@ input {
       border-color 0.22s ease;
   }
 
+  .hosted-layout--chrome-collapsed .problem-sidebar,
   .hosted-layout--sidebar-collapsed .problem-sidebar {
     width: 100%;
     max-height: 0;

@@ -80,8 +80,8 @@ export function ProblemSidebar({
             type="button"
             className="sidebar-toggle-btn"
             onClick={onToggleCollapse}
-            aria-label="Hide problem list"
-            title="Hide problems"
+            aria-label="Hide sidebar and toolbar"
+            title="Hide sidebar and toolbar"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
               <path

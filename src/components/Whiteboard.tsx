@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react'
 import {
   Tldraw,
-  DefaultColorStyle,
   getSnapshot,
   loadSnapshot,
   type Editor,
   type TLEditorSnapshot,
 } from 'tldraw'
 import 'tldraw/tldraw.css'
+import { WhiteboardStylePanel } from './WhiteboardStylePanel'
+import { applyWhiteboardDefaults } from '../lib/whiteboardDefaults'
 
 export interface WhiteboardHandle {
   getSnapshot: () => TLEditorSnapshot | null
@@ -93,9 +94,10 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
     return (
       <div className="whiteboard-container">
         <Tldraw
+          components={{ StylePanel: WhiteboardStylePanel }}
           onMount={(editor) => {
             editorRef.current = editor
-            editor.setStyleForNextShapes(DefaultColorStyle, 'white')
+            applyWhiteboardDefaults(editor)
             applyInitialSnapshot()
 
             // Listen to all user edits (draw, erase, delete) — not just document scope.
