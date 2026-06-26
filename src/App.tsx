@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { AuthGate } from './components/AuthGate'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { ProblemSidebar } from './components/ProblemSidebar'
@@ -392,6 +393,7 @@ export default function App({ mode = 'standalone' }: AppProps) {
   return (
     <AuthGate compact={compact}>
       <AppContent mode={mode} />
+      <Analytics />
     </AuthGate>
   )
 }
