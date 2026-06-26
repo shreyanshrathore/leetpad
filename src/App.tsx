@@ -1,10 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { AuthGate } from './components/AuthGate'
+import { ProblemSidebar } from './components/ProblemSidebar'
 import { Whiteboard, type WhiteboardHandle } from './components/Whiteboard'
 import { useAuth } from './hooks/useAuth'
 import { useProblemSlug } from './hooks/useProblemSlug'
 import { useRealtimeBoard } from './hooks/useRealtimeBoard'
+import { useSavedBoards } from './hooks/useSavedBoards'
+import { formatProblemTitle } from './lib/problemTitle'
 import type { AppMode } from './lib/runtimeContext'
+import { isHostedWebApp } from './lib/runtimeContext'
 
 function StatusText({ saveStatus }: { readonly saveStatus: string }) {
   if (saveStatus === 'saving') {
@@ -22,8 +26,120 @@ function StatusText({ saveStatus }: { readonly saveStatus: string }) {
   return <span className="save-status">Unsaved changes</span>
 }
 
-function AppContent({ mode }: { readonly mode: AppMode }) {
-  const embedded = mode === 'embedded'
+function HostedWelcome() {
+  return (
+    <div className="hosted-welcome">
+      <h2>Select a problem</h2>
+      <p>
+        Pick a saved board from the left, or open a new LeetCode slug to start a
+        fresh whiteboard.
+      </p>
+    </div>
+  )
+}
+
+function WhiteboardPanel({
+  slug,
+  userId,
+  logout,
+}: {
+  readonly slug: string
+  readonly userId: string
+  readonly logout: () => Promise<void>
+}) {
+  const {
+    initialSnapshot,
+    incomingSnapshot,
+    ready,
+    saveStatus,
+    error,
+    onLocalChange,
+    saveBoard,
+    registerGetSnapshot,
+  } = useRealtimeBoard(userId, slug)
+
+  const whiteboardRef = useRef<WhiteboardHandle>(null)
+
+  useEffect(() => {
+    registerGetSnapshot(() => whiteboardRef.current?.getSnapshot() ?? null)
+  }, [registerGetSnapshot])
+
+  return (
+    <div className="app-shell hosted-main__shell">
+      <header className="app-header">
+        <div>
+          <p className="eyebrow">LeetCode problem</p>
+          <h1>{formatProblemTitle(slug)}</h1>
+          <p className="hosted-main__slug">{slug}</p>
+        </div>
+        <div className="header-actions">
+          <StatusText saveStatus={saveStatus} />
+          <button type="button" onClick={() => void saveBoard()}>
+            Save
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void logout()}>
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      {error ? <p className="error-banner">{error}</p> : null}
+
+      <Whiteboard
+        key={slug}
+        ref={whiteboardRef}
+        initialSnapshot={initialSnapshot}
+        incomingSnapshot={incomingSnapshot}
+        ready={ready}
+        onChange={onLocalChange}
+      />
+    </div>
+  )
+}
+
+function HostedAppContent() {
+  const { user, logout } = useAuth()
+  const { slug, loading, navigateToProblem } = useProblemSlug()
+  const { boards, loading: boardsLoading, error: boardsError } = useSavedBoards(
+    user?.uid ?? null,
+  )
+  const autoSelectedRef = useRef(false)
+
+  useEffect(() => {
+    if (loading || boardsLoading || slug || autoSelectedRef.current) return
+    if (boards.length === 0) return
+
+    autoSelectedRef.current = true
+    navigateToProblem(boards[0].slug)
+  }, [boards, boardsLoading, loading, navigateToProblem, slug])
+
+  if (loading) {
+    return <div className="centered-message">Loading your workspace...</div>
+  }
+
+  return (
+    <div className="hosted-layout">
+      <ProblemSidebar
+        boards={boards}
+        boardsLoading={boardsLoading}
+        boardsError={boardsError}
+        activeSlug={slug}
+        onSelectProblem={navigateToProblem}
+        onOpenNewProblem={navigateToProblem}
+      />
+
+      <main className="hosted-main">
+        {slug && user ? (
+          <WhiteboardPanel slug={slug} userId={user.uid} logout={logout} />
+        ) : (
+          <HostedWelcome />
+        )}
+      </main>
+    </div>
+  )
+}
+
+function StandaloneAppContent({ embedded }: { readonly embedded: boolean }) {
   const { user, logout } = useAuth()
   const { slug, loading, needsManualInput, manualSlug, setManualSlug, commitManualSlug } =
     useProblemSlug()
@@ -52,7 +168,7 @@ function AppContent({ mode }: { readonly mode: AppMode }) {
     )
   }
 
-  if (!embedded && needsManualInput) {
+  if (needsManualInput) {
     return (
       <div className="auth-screen">
         <h1>Choose a problem</h1>
@@ -120,13 +236,23 @@ function AppContent({ mode }: { readonly mode: AppMode }) {
   )
 }
 
+function AppContent({ mode }: { readonly mode: AppMode }) {
+  const embedded = mode === 'embedded'
+  if (isHostedWebApp() && !embedded) {
+    return <HostedAppContent />
+  }
+  return <StandaloneAppContent embedded={embedded} />
+}
+
 interface AppProps {
   readonly mode?: AppMode
 }
 
 export default function App({ mode = 'standalone' }: AppProps) {
+  const compact = mode === 'embedded'
+
   return (
-    <AuthGate compact={mode === 'embedded'}>
+    <AuthGate compact={compact}>
       <AppContent mode={mode} />
     </AuthGate>
   )

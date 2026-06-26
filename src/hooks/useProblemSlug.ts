@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   extractProblemSlug,
   extractProblemSlugFromQuery,
@@ -6,6 +6,7 @@ import {
 import {
   isContentScriptContext,
   isExtensionPageContext,
+  isHostedWebApp,
 } from '../lib/runtimeContext'
 
 function isSidePanelContext(): boolean {
@@ -22,6 +23,10 @@ async function getActiveTabUrl(): Promise<string | null> {
   })
 }
 
+function readHostedSlug(): string | null {
+  return extractProblemSlugFromQuery()
+}
+
 /**
  * Detect the current LeetCode problem slug.
  * - Extension: read active tab URL
@@ -32,13 +37,31 @@ export function useProblemSlug() {
   const [loading, setLoading] = useState(true)
   const [manualSlug, setManualSlug] = useState('')
 
+  const navigateToProblem = useCallback((nextSlug: string) => {
+    const trimmed = nextSlug.trim()
+    if (!trimmed) return
+
+    if (isHostedWebApp()) {
+      const url = new URL(window.location.href)
+      url.searchParams.set('problem', trimmed)
+      window.history.pushState({}, '', url.toString())
+      setSlug(trimmed)
+      return
+    }
+
+    setSlug(trimmed)
+    const url = new URL(window.location.href)
+    url.searchParams.set('problem', trimmed)
+    window.history.replaceState({}, '', url.toString())
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
     async function detectSlug() {
       setLoading(true)
 
-      const querySlug = extractProblemSlugFromQuery()
+      const querySlug = readHostedSlug()
       if (querySlug) {
         if (!cancelled) {
           setSlug(querySlug)
@@ -66,6 +89,18 @@ export function useProblemSlug() {
     }
 
     detectSlug()
+
+    if (isHostedWebApp()) {
+      const onPopState = () => {
+        setSlug(readHostedSlug())
+      }
+
+      window.addEventListener('popstate', onPopState)
+      return () => {
+        cancelled = true
+        window.removeEventListener('popstate', onPopState)
+      }
+    }
 
     if (isSidePanelContext()) {
       const onTabUpdated = (
@@ -108,22 +143,16 @@ export function useProblemSlug() {
   }, [])
 
   function commitManualSlug() {
-    const trimmed = manualSlug.trim()
-    if (!trimmed) return
-
-    setSlug(trimmed)
-
-    const url = new URL(window.location.href)
-    url.searchParams.set('problem', trimmed)
-    window.history.replaceState({}, '', url.toString())
+    navigateToProblem(manualSlug)
   }
 
   return {
     slug,
     loading,
-    needsManualInput: !loading && !slug,
+    needsManualInput: !loading && !slug && !isHostedWebApp(),
     manualSlug,
     setManualSlug,
     commitManualSlug,
+    navigateToProblem,
   }
 }

@@ -24,3 +24,9 @@ export function isExtensionRuntime(): boolean {
 export function getAppMode(): AppMode {
   return isContentScriptContext() ? 'embedded' : 'standalone'
 }
+
+/** Hosted web / iPad app (not extension pages or content scripts). */
+export function isHostedWebApp(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.location.protocol === 'http:' || window.location.protocol === 'https:'
+}
